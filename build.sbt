@@ -17,6 +17,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaV,
   "com.typesafe.akka" %% "akka-stream" % akkaV,
   "com.typesafe.akka" %% "akka-cluster" % akkaV,
+  "com.lihaoyi" %% "autowire" % "0.2.6",
   "joda-time" % "joda-time" % "2.9.7",
   "com.typesafe.akka" %% "akka-stream-kafka" % "0.13"
 )

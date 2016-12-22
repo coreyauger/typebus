@@ -11,10 +11,15 @@ import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.joda.time.DateTime
 
+import scala.concurrent.Future
+import scala.reflect.ClassTag
+
 /**
   * Created by suroot on 21/12/16.
   */
 trait Transformer extends Module{
+
+  def transform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 
   def startTransformer(consumerSettings: ConsumerSettings[Array[Byte], String], producerSettings: ProducerSettings[Array[Byte], String], mapper: Mapper)(implicit system: ActorSystem) = {
     import system.dispatcher

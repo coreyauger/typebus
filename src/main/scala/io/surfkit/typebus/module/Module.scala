@@ -12,7 +12,7 @@ trait Module {
   var orchestration: (m.Model) => List[m.Model] = null
   var listOfTopics = List.empty[String]
 
-  def transform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = {
+  protected[this] def op[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = {
     listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "") :: listOfTopics
     listOfPartials = p :: listOfPartials
     Unit

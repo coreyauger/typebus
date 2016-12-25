@@ -18,6 +18,8 @@ trait Module {
     Unit
   }
 
+  protected[this] def composer(x: Future[m.Model]): Option[Future[m.Model]] = Some(x)
+
   def orchestrate[T <: m.Model : ClassTag](p: (T) => List[m.Model]) = {
     listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "") :: listOfTopics
     orchestration = p.asInstanceOf[(m.Model) => List[m.Model]]

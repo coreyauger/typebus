@@ -14,7 +14,7 @@ object Main extends App{
 
     def add(x: Number, y: Number) = Number(x.x+y.x)
 
-    startService()
+    //startService()
   }
   //object
 }

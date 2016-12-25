@@ -35,7 +35,7 @@ package object event {
     //val ttag: ClassTag[U]
     //val result = Promise[ttag.runtimeClass.asInstanceOf[Class[U]]]
   //}
-   @implicitNotFound(
+  /* @implicitNotFound(
      "No Rpc definition found for type ${T}. Try to implement an implicit RpcCall for this type."
    )
   class RpcCall[T <: m.Model, U <: m.Model](implicit val ttag: ClassTag[U]){
@@ -50,7 +50,9 @@ package object event {
   object Rpc {
     //def toRpc[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.result
     def test[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.ctype
-  }
+  }*/
+
+  type RpcCall = (m.Model) => Future[m.Model]
 }
 
 

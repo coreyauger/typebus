@@ -64,6 +64,7 @@ trait Service[Api] extends Module{
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
         //println(s"event: ${event}")
+
         AutowireServer.route[Api](api)(
           autowire.Core.Request(
             Seq("what is this?"),publish.payload.asInstanceOf[Map[String,String]])

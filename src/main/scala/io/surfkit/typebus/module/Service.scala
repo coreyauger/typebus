@@ -21,11 +21,11 @@ import scala.reflect.ClassTag
 /**
   * Created by suroot on 21/12/16.
   */
-trait Service extends Module{
+trait Service[API] extends Module{
 
   def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 
-  def startService(consumerSettings: ConsumerSettings[Array[Byte], String], mapper: Mapper)(implicit system: ActorSystem) = {
+  def startService(consumerSettings: ConsumerSettings[Array[Byte], String], mapper: Mapper, api: API)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !

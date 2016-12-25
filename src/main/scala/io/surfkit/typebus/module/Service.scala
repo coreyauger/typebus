@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 /**
   * Created by suroot on 21/12/16.
   */
-trait Service extends extends Module{
+trait Service extends Module{
 
   def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 

@@ -15,8 +15,19 @@ trait Module {
   protected[this] def op[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = {
     listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "") :: listOfTopics
     listOfPartials = p :: listOfPartials
+    println(s"partial: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "")}")
     Unit
   }
+
+  protected[this] def funToPF[T <: m.Model : ClassTag](f: (T) => Future[m.Model]) = new PartialFunction[T, Future[m.Model]] {
+    def apply(x: T) = f(x.asInstanceOf[T])
+    def isDefinedAt(x: T ) = x match{
+      case _: T => true
+      case _ => false
+    }
+  }
+
+  //protected[this] def composer(x: Future[m.Model]): Option[Future[m.Model]] = Some(x)
 
   def orchestrate[T <: m.Model : ClassTag](p: (T) => List[m.Model]) = {
     listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "") :: listOfTopics

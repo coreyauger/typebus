@@ -21,11 +21,12 @@ import scala.reflect.ClassTag
 /**
   * Created by suroot on 21/12/16.
   */
-trait Service[API] extends Module{
+trait Service[Api] extends Module{
 
   def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 
-  def startService(consumerSettings: ConsumerSettings[Array[Byte], String], mapper: Mapper, api: API)(implicit system: ActorSystem) = {
+
+  def startService(consumerSettings: ConsumerSettings[Array[Byte], String], mapper: Mapper, api: Api)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -33,10 +34,12 @@ trait Service[API] extends Module{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model), Future[Done]]{
-      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model) ) = {
+    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any), Future[Done]]{
+      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = {
+        println("replyAndCommit")
         implicit val timeout = Timeout(4 seconds)
-        println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+        //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+        println(s"Doing actor selection and send: ${x._2.source}")
         system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
           actor ! PublishedEvent(
             eventId = UUID.randomUUID.toString,
@@ -50,14 +53,15 @@ trait Service[API] extends Module{
           x._1.committableOffset.commitScaladsl()
         }
       }
-      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model) ) = true
+      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = true
     }
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(1) { msg =>
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
-        println(s"event: ${event}")
+        //println(s"event: ${event}")
+        //println(s"event.payload: ${event.payload}")
         handleEvent(event.payload).map( x => (msg, event, x) )
       }
       .mapAsyncUnordered(1)(replyAndCommit)

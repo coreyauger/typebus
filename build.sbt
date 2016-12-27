@@ -2,7 +2,7 @@ name := "type-bus"
 
 organization in ThisBuild := "io.surfkit"
 
-scalaVersion in ThisBuild := "2.11.7"
+scalaVersion in ThisBuild := "2.11.8"
 
 version in ThisBuild := "0.0.1-SNAPSHOT"
 
@@ -17,7 +17,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaV,
   "com.typesafe.akka" %% "akka-stream" % akkaV,
   "com.typesafe.akka" %% "akka-cluster" % akkaV,
-  "com.lihaoyi" %% "autowire" % "0.2.6",
   "joda-time" % "joda-time" % "2.9.7",
   "com.typesafe.akka" %% "akka-stream-kafka" % "0.13"
 )

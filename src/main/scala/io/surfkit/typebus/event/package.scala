@@ -11,13 +11,13 @@ import scala.reflect.ClassTag
 
 package object event {
 
-  case class Event[T](
+  /*case class Event[T](
                        source: String,
                        userIdentifier: Option[String],
                        correlationId: Option[String],
                        occurredAt: DateTime,
                        payload: T
-                     )
+                     )*/
 
   case class PublishedEvent[T](
                                 eventId: String,

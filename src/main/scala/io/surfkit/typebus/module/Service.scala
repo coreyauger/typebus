@@ -34,15 +34,12 @@ trait Service[Api] extends Module{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-    object AutowireServer extends autowire.Server[String, autowire.Bounds.None, autowire.Bounds.None]{
-      def read[Result: autowire.Bounds.None](p: String) = mapper.readValue(p)
-      def write[Result: autowire.Bounds.None](r: Result) = mapper.writeValueAsString(r)
-    }
-
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any), Future[Done]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = {
+        println("replyAndCommit")
         implicit val timeout = Timeout(4 seconds)
-        println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+        //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+        println(s"Doing actor selection and send: ${x._2.source}")
         system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
           actor ! PublishedEvent(
             eventId = UUID.randomUUID.toString,
@@ -64,12 +61,8 @@ trait Service[Api] extends Module{
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
         //println(s"event: ${event}")
-
-        AutowireServer.route[Api](api)(
-          autowire.Core.Request(
-            Seq("what is this?"),publish.payload.asInstanceOf[Map[String,String]])
-        ).map( x => (msg, event, x) )
-        //handleEvent(event.payload).map( x => (msg, event, x) )
+        //println(s"event.payload: ${event.payload}")
+        handleEvent(event.payload).map( x => (msg, event, x) )
       }
       .mapAsyncUnordered(1)(replyAndCommit)
       .runWith(Sink.ignore)

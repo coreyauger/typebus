@@ -28,7 +28,7 @@ package object event {
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,
                                 payload: T
-                              )
+                              ) extends m.Model
 
 
  // trait RpcCall[T <: m.Model, U <: m.Model]{

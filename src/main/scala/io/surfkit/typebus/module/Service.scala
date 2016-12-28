@@ -57,14 +57,14 @@ trait Service[Api] extends Module{
     }
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
-      .mapAsyncUnordered(1) { msg =>
+      .mapAsyncUnordered(4) { msg =>
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
         //println(s"event: ${event}")
         //println(s"event.payload: ${event.payload}")
         handleEvent(event.payload).map( x => (msg, event, x) )
       }
-      .mapAsyncUnordered(1)(replyAndCommit)
+      .mapAsyncUnordered(4)(replyAndCommit)
       .runWith(Sink.ignore)
   }
 }

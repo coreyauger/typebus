@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.cluster.Cluster
 import io.surfkit.typebus.Mapper
-import io.surfkit.typebus.event.PublishedEvent
+import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 import org.joda.time.DateTime
 
@@ -45,7 +45,7 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
           log.error(e, "Error trying to publish event.")
       }
 
-    case x:PublishedEvent[_] =>
+    case x:ResponseEvent[_] =>
       println("GatherActor posting a reply....")
       replyTo ! x.payload
       context.stop(self)

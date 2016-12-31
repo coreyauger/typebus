@@ -41,7 +41,7 @@ trait Service[Api] extends Module{
         //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
         println(s"Doing actor selection and send: ${x._2.source}")
         system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
-          actor ! PublishedEvent(
+          actor ! ResponseEvent(
             eventId = UUID.randomUUID.toString,
             eventType = x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
             userIdentifier = x._2.userIdentifier,

@@ -30,6 +30,17 @@ package object event {
                                 payload: T
                               ) extends m.Model
 
+  case class ResponseEvent[T](
+                                eventId: String,
+                                eventType: String,
+                                source: String,
+                                userIdentifier: Option[String],
+                                correlationId: Option[String],
+                                occurredAt: DateTime,
+                                publishedAt: DateTime,
+                                payload: T
+                              ) extends m.Model
+
 
  // trait RpcCall[T <: m.Model, U <: m.Model]{
     //val ttag: ClassTag[U]

@@ -44,6 +44,7 @@ trait Orchestration extends Module{
             source = x._2.source,
             publishedAt = new DateTime(),
             occurredAt = new DateTime(),
+            socketId = x._2.socketId,
             correlationId = x._2.correlationId,
             payload = x._3)
           x._1.committableOffset.commitScaladsl()

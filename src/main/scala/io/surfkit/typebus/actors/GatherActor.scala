@@ -34,6 +34,7 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
               eventType = msg.data.getClass.getCanonicalName.replaceAll("\\$", ""),
               source = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}",
               userIdentifier = None,
+              socketId = None,
               correlationId = None,
               occurredAt = new DateTime(),
               publishedAt = new DateTime(),

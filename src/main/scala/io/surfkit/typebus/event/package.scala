@@ -19,11 +19,18 @@ package object event {
                        payload: T
                      )*/
 
+  case class SocketEvent[T](
+                             correlationId: String,
+                             occurredAt: DateTime,
+                             payload: T
+                           ) extends m.Model
+
   case class PublishedEvent[T](
                                 eventId: String,
                                 eventType: String,
                                 source: String,
                                 userIdentifier: Option[String],
+                                socketId: Option[String],
                                 correlationId: Option[String],
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,
@@ -35,6 +42,7 @@ package object event {
                                 eventType: String,
                                 source: String,
                                 userIdentifier: Option[String],
+                                socketId: Option[String],
                                 correlationId: Option[String],
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,

@@ -3,15 +3,17 @@ package io.surfkit.typebus.client
 import akka.actor.ActorSystem
 import io.surfkit.typebus.actors.GatherActor
 import org.apache.kafka.clients.producer.KafkaProducer
+import io.surfkit.typebus.macros.TypeBusClient
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-
+trait ApiClient[Api]
 /**
   * Created by suroot on 21/12/16.
   */
-class Client[Api](mapper: io.surfkit.typebus.Mapper)(implicit system: ActorSystem){
+
+class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system: ActorSystem){
   import akka.pattern.ask
   import collection.JavaConversions._
   import akka.util.Timeout
@@ -30,5 +32,7 @@ class Client[Api](mapper: io.surfkit.typebus.Mapper)(implicit system: ActorSyste
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
   }
 
+  //@TypeBusClient("")
+  //object api extends ApiClient[Api]
 
 }

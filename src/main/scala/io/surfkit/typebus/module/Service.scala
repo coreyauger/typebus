@@ -46,6 +46,7 @@ trait Service[Api] extends Module{
             eventType = x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
             userIdentifier = x._2.userIdentifier,
             source = x._2.source,
+            socketId = x._2.socketId,
             publishedAt = new DateTime(),
             occurredAt = new DateTime(),
             correlationId = x._2.correlationId,

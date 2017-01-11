@@ -28,7 +28,7 @@ trait Orchestration[API] extends Module{
 
   def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 
-  def startOrchestration(consumerSettings: ConsumerSettings[Array[Byte], String], producerSettings: ProducerSettings[Array[Byte], String], mapper: Mapper)(implicit system: ActorSystem) = {
+  def startOrchestration(consumerSettings: ConsumerSettings[Array[Byte], String], /*producerSettings: ProducerSettings[Array[Byte], String],*/ mapper: Mapper)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume // Never give up !

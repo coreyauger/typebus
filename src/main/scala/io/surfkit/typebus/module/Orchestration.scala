@@ -36,23 +36,28 @@ trait Orchestration[API] extends Module{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
+    def reply(reply: Any, x: PublishedEvent[_]) = {
+      implicit val timeout = Timeout(4 seconds)
+      //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+      println(s"Doing actor selection and send: ${x.source}")
+      system.actorSelection(x.source).resolveOne().map { actor =>
+        actor ! ResponseEvent(
+          eventId = UUID.randomUUID.toString,
+          eventType = reply.getClass.getCanonicalName.replaceAll("\\$", ""),
+          userIdentifier = x.userIdentifier,
+          source = x.source,
+          socketId = x.socketId,
+          publishedAt = new DateTime(),
+          occurredAt = new DateTime(),
+          correlationId = x.correlationId,
+          payload = reply)
+      }
+    }
+
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String], PublishedEvent[_], Any), Future[Done]] {
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String], PublishedEvent[_], Any)) = {
         println("replyAndCommit")
-        implicit val timeout = Timeout(4 seconds)
-        //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
-        println(s"Doing actor selection and send: ${x._2.source}")
-        system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
-          actor ! ResponseEvent(
-            eventId = UUID.randomUUID.toString,
-            eventType = x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
-            userIdentifier = x._2.userIdentifier,
-            source = x._2.source,
-            socketId = x._2.socketId,
-            publishedAt = new DateTime(),
-            occurredAt = new DateTime(),
-            correlationId = x._2.correlationId,
-            payload = x._3)
+        reply(x._3, x._2).flatMap{ _ =>
           x._1.committableOffset.commitScaladsl()
         }
       }

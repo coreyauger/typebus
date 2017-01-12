@@ -18,6 +18,7 @@ class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) ext
   def receive = {
     case x:PublishedEvent[_] =>
       try {
+        println(s"[ProducerActor] publish ${x.payload.getClass}")
         log.info(s"[ProducerActor] publish ${x.payload.getClass}")
         producer.send(
           new ProducerRecord[Array[Byte], String](

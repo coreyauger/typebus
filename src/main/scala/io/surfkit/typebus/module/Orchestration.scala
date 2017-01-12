@@ -26,7 +26,26 @@ import scala.reflect.ClassTag
   */
 trait Orchestration[API] extends Module{
 
-  def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
+  def perform[T <: m.Model : ClassTag](p: PartialFunction[PublishedEvent[T], Future[m.Model]]) = orchestrate(p)
+
+  def reply(reply: Any, x: PublishedEvent[_])(implicit system: ActorSystem) = {
+    import system.dispatcher
+    implicit val timeout = Timeout(4 seconds)
+    //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
+    println(s"Doing actor selection and send: ${x.source}")
+    system.actorSelection(x.source).resolveOne().map { actor =>
+      actor ! ResponseEvent(
+        eventId = UUID.randomUUID.toString,
+        eventType = reply.getClass.getCanonicalName.replaceAll("\\$", ""),
+        userIdentifier = x.userIdentifier,
+        source = x.source,
+        socketId = x.socketId,
+        publishedAt = new DateTime(),
+        occurredAt = new DateTime(),
+        correlationId = x.correlationId,
+        payload = reply)
+    }
+  }
 
   def startOrchestration(consumerSettings: ConsumerSettings[Array[Byte], String], /*producerSettings: ProducerSettings[Array[Byte], String],*/ mapper: Mapper)(implicit system: ActorSystem) = {
     import system.dispatcher
@@ -35,40 +54,23 @@ trait Orchestration[API] extends Module{
     }
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
-
-    def reply(reply: Any, x: PublishedEvent[_]) = {
-      implicit val timeout = Timeout(4 seconds)
-      //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
-      println(s"Doing actor selection and send: ${x.source}")
-      system.actorSelection(x.source).resolveOne().map { actor =>
-        actor ! ResponseEvent(
-          eventId = UUID.randomUUID.toString,
-          eventType = reply.getClass.getCanonicalName.replaceAll("\\$", ""),
-          userIdentifier = x.userIdentifier,
-          source = x.source,
-          socketId = x.socketId,
-          publishedAt = new DateTime(),
-          occurredAt = new DateTime(),
-          correlationId = x.correlationId,
-          payload = reply)
-      }
-    }
-
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String], PublishedEvent[_], Any), Future[Done]] {
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String], PublishedEvent[_], Any)) = {
-        println("replyAndCommit")
+        println("Orchestration replyAndCommit")
         reply(x._3, x._2).flatMap{ _ =>
           x._1.committableOffset.commitScaladsl()
         }
       }
-
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], String], PublishedEvent[_], Any)) = true
     }
 
+    println("=================== Orchestration")
+    listOfTopics.foreach(println)
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics: _*))
       .mapAsyncUnordered(4) { msg =>
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload))) // FIXME: we have to write and read again .. grrr !!
+        println(s"Orchestration event: ${event}")
         handleOrchestrate(event).map(x => (msg, event, x))
       }
       .mapAsyncUnordered(4)(replyAndCommit)

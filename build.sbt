@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.11.8"
 
-version in ThisBuild := "0.0.2"
+version in ThisBuild := "0.0.3-SNAPSHOT"
 
 resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"
 

@@ -6,6 +6,12 @@ scalaVersion in ThisBuild := "2.11.8"
 
 version in ThisBuild := "0.0.2"
 
+resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"
+
+credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+
+publishTo := Some("NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/")
+
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
 lazy val `type-bus` =

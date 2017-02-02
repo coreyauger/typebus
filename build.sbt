@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.11.8"
 
-version in ThisBuild := "0.0.2"
+version in ThisBuild := "0.0.3-SNAPSHOT"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 

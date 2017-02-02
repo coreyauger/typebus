@@ -5,6 +5,7 @@ package io.surfkit.typebus
   */
 import org.joda.time.DateTime
 
+import java.util.UUID
 import scala.annotation.implicitNotFound
 import scala.concurrent.{Future, Promise}
 import scala.reflect.ClassTag
@@ -35,7 +36,32 @@ package object event {
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,
                                 payload: T
-                              ) extends m.Model
+                              ) extends m.Model{
+
+    def toReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
+      eventId = eventId,
+      eventType = payload.getClass.getCanonicalName.replaceAll("\\$", ""),
+      source = this.source,
+      userIdentifier = this.userIdentifier,
+      socketId = this.socketId,
+      correlationId = this.correlationId,
+      occurredAt = this.occurredAt,
+      publishedAt = this.publishedAt,
+      payload = payload
+    )
+
+    def toEvent[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
+      eventId = eventId,
+      eventType = payload.getClass.getCanonicalName.replaceAll("\\$", ""),
+      source = this.source,
+      userIdentifier = this.userIdentifier,
+      socketId = this.socketId,
+      correlationId = this.correlationId,
+      occurredAt = this.occurredAt,
+      publishedAt = this.publishedAt,
+      payload = payload
+    )
+  }
 
   case class ResponseEvent[T](
                                 eventId: String,

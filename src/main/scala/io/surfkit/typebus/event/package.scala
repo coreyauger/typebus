@@ -50,7 +50,7 @@ package object event {
       payload = payload
     )
 
-    def toEvent[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
+    def toEvent[U](payload: U, eventId: String = UUID.randomUUID().toString) = PublishedEvent(
       eventId = eventId,
       eventType = payload.getClass.getCanonicalName.replaceAll("\\$", ""),
       source = this.source,

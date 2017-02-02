@@ -36,10 +36,10 @@ trait Service[Api] extends Module{
 
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any), Future[Done]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = {
-        println("replyAndCommit")
+        //println("replyAndCommit")
         implicit val timeout = Timeout(4 seconds)
         //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
-        println(s"Doing actor selection and send: ${x._2.source}")
+        //println(s"Doing actor selection and send: ${x._2.source}")
         system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
           actor ! ResponseEvent(
             eventId = UUID.randomUUID.toString,

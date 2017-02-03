@@ -1,6 +1,7 @@
 package io.surfkit.typebus.client
 
 import akka.actor.ActorSystem
+import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.actors.GatherActor
 import org.apache.kafka.clients.producer.KafkaProducer
 import io.surfkit.typebus.macros.TypeBusClient
@@ -19,8 +20,10 @@ class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system:
   import akka.util.Timeout
   import system.dispatcher
 
+  val kafka = ConfigFactory.load.getString("bus.kafka")
+
   val producer = new KafkaProducer[Array[Byte], String](Map(
-    "bootstrap.servers" -> "localhost:9092",
+    "bootstrap.servers" -> kafka,
     "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
     "value.serializer" -> "org.apache.kafka.common.serialization.StringSerializer"
   ))

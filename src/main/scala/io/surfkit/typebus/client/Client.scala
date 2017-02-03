@@ -13,14 +13,14 @@ trait ApiClient[Api]
   * Created by suroot on 21/12/16.
   */
 
-class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system: ActorSystem){
+class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper, host: String)(implicit system: ActorSystem){
   import akka.pattern.ask
   import collection.JavaConversions._
   import akka.util.Timeout
   import system.dispatcher
 
   val producer = new KafkaProducer[Array[Byte], String](Map(
-    "bootstrap.servers" -> "localhost:9092",
+    "bootstrap.servers" -> host,
     "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
     "value.serializer" -> "org.apache.kafka.common.serialization.StringSerializer"
   ))

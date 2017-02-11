@@ -8,8 +8,13 @@ version in ThisBuild := "0.0.3"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
+resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"
+
+credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
+
 lazy val `type-bus` =
   (project in file("."))
+  .settings(publishTo := Some("NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"), publishArtifact in (Compile, packageDoc) := false)
   //.settings(commonSettings:_*)
   //.settings(resolverSettings: _*)
 

@@ -32,10 +32,10 @@ trait Transformer extends Module{
     val consumerToProducer = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model), ProducerMessage.Message[Array[Byte], String, ConsumerMessage.CommittableOffset]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model) ) = {
         ProducerMessage.Message(new ProducerRecord[Array[Byte], String](
-          x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
+          x._3.getClass.getCanonicalName,
           mapper.writeValueAsString(PublishedEvent(
             eventId = UUID.randomUUID.toString,
-            eventType = x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
+            eventType = x._3.getClass.getCanonicalName,
             userIdentifier = x._2.userIdentifier,
             source = x._2.source,
             socketId = x._2.socketId,

@@ -28,10 +28,10 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
         log.info(s"[GatherActor] publish ${msg.data}")
         producer.send(
           new ProducerRecord[Array[Byte], String](
-            msg.data.getClass.getCanonicalName.replaceAll("\\$", ""),
+            msg.data.getClass.getCanonicalName,
             mapper.writeValueAsString(PublishedEvent[m.Model](
               eventId = UUID.randomUUID.toString,
-              eventType = msg.data.getClass.getCanonicalName.replaceAll("\\$", ""),
+              eventType = msg.data.getClass.getCanonicalName,
               source = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}",
               userIdentifier = None,
               socketId = None,
@@ -47,7 +47,7 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
       }
 
     case x:ResponseEvent[_] =>
-      println("GatherActor posting a reply....")
+      log.debug(s"GatherActor posting a reply.... ${x.payload.getClass.getSimpleName}")
       replyTo ! x.payload
       context.stop(self)
 

@@ -22,7 +22,7 @@ class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) ext
         log.info(s"[ProducerActor] publish ${x.payload.getClass}")
         producer.send(
           new ProducerRecord[Array[Byte], String](
-            x.payload.getClass.getCanonicalName.replaceAll("\\$", ""),
+            x.payload.getClass.getCanonicalName,
             mapper.writeValueAsString(x)
           )
         )

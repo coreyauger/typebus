@@ -16,9 +16,9 @@ trait Module {
   var listOfTopics = List.empty[String]
 
   protected[this] def op[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = {
-    listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "") :: listOfTopics
+    listOfTopics = scala.reflect.classTag[T].runtimeClass.getCanonicalName :: listOfTopics
     listOfPartials = p :: listOfPartials
-    println(s"partial: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "")}")
+    println(s"partial: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 
@@ -39,7 +39,7 @@ trait Module {
   }
 
   protected[this] def orchestrate[T <: m.Model : ClassTag](p: (PublishedEvent[T]) => Future[m.Model]) = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName.replaceAll("\\$", "")
+    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     listOfTopics = topic :: listOfTopics
     //orchestration = p.asInstanceOf[PartialFunction[PublishedEvent[m.Model], Future[m.Model]]] :: orchestration
     orchestrationMap += topic -> p.asInstanceOf[ (PublishedEvent[m.Model]) => Future[m.Model] ]
@@ -54,7 +54,7 @@ trait Module {
     })( (a, b) => a.orElse(b) )*/
 
   protected[this] def handleOrchestrate(event: PublishedEvent[m.Model]) = {
-    val topic = event.payload.getClass.getCanonicalName.replaceAll("\\$", "")
+    val topic = event.payload.getClass.getCanonicalName
     orchestrationMap(topic)(event)
   }
 

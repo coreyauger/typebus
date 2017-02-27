@@ -40,7 +40,7 @@ package object event {
 
     def toReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
       eventId = eventId,
-      eventType = payload.getClass.getCanonicalName.replaceAll("\\$", ""),
+      eventType = payload.getClass.getCanonicalName,
       source = this.source,
       userIdentifier = this.userIdentifier,
       socketId = this.socketId,
@@ -50,9 +50,21 @@ package object event {
       payload = payload
     )
 
+    def toBroadcastReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
+      eventId = eventId,
+      eventType = payload.getClass.getCanonicalName,
+      source = this.source,
+      userIdentifier = this.userIdentifier,
+      socketId = None,
+      correlationId = this.correlationId,
+      occurredAt = this.occurredAt,
+      publishedAt = this.publishedAt,
+      payload = payload
+    )
+
     def toEvent[U](payload: U, eventId: String = UUID.randomUUID().toString) = PublishedEvent(
       eventId = eventId,
-      eventType = payload.getClass.getCanonicalName.replaceAll("\\$", ""),
+      eventType = payload.getClass.getCanonicalName,
       source = this.source,
       userIdentifier = this.userIdentifier,
       socketId = this.socketId,

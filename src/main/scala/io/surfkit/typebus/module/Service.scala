@@ -43,7 +43,7 @@ trait Service[Api] extends Module{
         system.actorSelection(x._2.source).resolveOne().flatMap { actor =>
           actor ! ResponseEvent(
             eventId = UUID.randomUUID.toString,
-            eventType = x._3.getClass.getCanonicalName.replaceAll("\\$", ""),
+            eventType = x._3.getClass.getCanonicalName,
             userIdentifier = x._2.userIdentifier,
             source = x._2.source,
             socketId = x._2.socketId,

@@ -36,7 +36,7 @@ trait Orchestration[API] extends Module{
     system.actorSelection(x.source).resolveOne().map { actor =>
       actor ! ResponseEvent(
         eventId = UUID.randomUUID.toString,
-        eventType = reply.getClass.getCanonicalName.replaceAll("\\$", ""),
+        eventType = reply.getClass.getCanonicalName,
         userIdentifier = x.userIdentifier,
         source = x.source,
         socketId = x.socketId,

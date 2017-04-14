@@ -71,7 +71,12 @@ trait Orchestration[API] extends Module{
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
         val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload))) // FIXME: we have to write and read again .. grrr !!
         println(s"Orchestration event: ${event}")
-        handleOrchestrate(event).map(x => (msg, event, x))
+        handleOrchestrate(event).map(x => (msg, event, x)).recover{
+          case t: Throwable =>
+            println(s"ERROR handling event: ${event.payload.getClass.getName}")
+            t.printStackTrace()
+            throw t
+        }
       }
       .mapAsyncUnordered(4)(replyAndCommit)
       .runWith(Sink.ignore)

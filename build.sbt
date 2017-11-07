@@ -8,7 +8,7 @@ version in ThisBuild := "0.0.4-SNAPSHOT"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
-resolvers += "NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"
+resolvers += "NextWave Repo" at "https://repository.conversant.im/artifactory/nxtwv-maven/"
 
 credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
 

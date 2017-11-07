@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.11.8"
 
-version in ThisBuild := "0.0.3"
+version in ThisBuild := "0.0.4-SNAPSHOT"
 
 addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
@@ -14,7 +14,7 @@ credentials += Credentials(Path.userHome / ".ivy2" / ".credentials")
 
 lazy val `type-bus` =
   (project in file("."))
-  .settings(publishTo := Some("NextWave Repo" at "http://maxdevmaster.cloudapp.net:4343/artifactory/nxtwv-maven/"), publishArtifact in (Compile, packageDoc) := false)
+  .settings(publishTo := Some("NextWave Repo" at "https://repository.conversant.im/artifactory/nxtwv-maven/"), publishArtifact in (Compile, packageDoc) := false)
   //.settings(commonSettings:_*)
   //.settings(resolverSettings: _*)
 

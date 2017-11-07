@@ -25,7 +25,7 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
     case msg: GatherActor.Request =>
       replyTo = context.sender()
       try {
-        log.info(s"[GatherActor] publish ${msg.data}")
+        log.debug(s"[GatherActor] publish ${msg.data}")
         producer.send(
           new ProducerRecord[Array[Byte], String](
             msg.data.getClass.getCanonicalName,

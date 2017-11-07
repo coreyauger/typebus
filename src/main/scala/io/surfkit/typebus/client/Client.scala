@@ -28,9 +28,7 @@ class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system:
     "value.serializer" -> "org.apache.kafka.common.serialization.StringSerializer"
   ))
 
-  implicit val timeout = Timeout(4 seconds)
-
-  def wire[T <: m.Model, U <: m.Model](x: T):Future[U] = {
+  def wire[T <: m.Model, U <: m.Model](x: T)(implicit timeout:Timeout = Timeout(4 seconds)):Future[U] = {
     val gather = system.actorOf(GatherActor.props(producer, mapper))
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
   }

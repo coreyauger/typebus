@@ -10,9 +10,6 @@ object ProducerActor{
 }
 
 class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) extends Actor with ActorLogging {
-  //val cluster = Cluster(context.system)
-
-  log.debug(s"adding http actor ${self.path.toStringWithoutAddress}")
   var replyTo:ActorRef = null
 
   def receive = {

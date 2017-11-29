@@ -1,6 +1,6 @@
 package io.surfkit.typebus.client
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, PoisonPill}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.actors.GatherActor
 import org.apache.kafka.clients.producer.KafkaProducer
@@ -30,7 +30,13 @@ class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system:
 
   def wire[T <: m.Model, U <: m.Model](x: T)(implicit timeout:Timeout = Timeout(4 seconds)):Future[U] = {
     val gather = system.actorOf(GatherActor.props(producer, mapper))
-    (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
+    try {
+      (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
+    }catch{
+      case t: Throwable =>
+        gather ! PoisonPill
+        Future.failed(t)
+    }
   }
 
   //@TypeBusClient("")

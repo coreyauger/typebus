@@ -44,6 +44,7 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper) exten
       }catch{
         case e:Exception =>
           log.error(e, "Error trying to publish event.")
+          context.stop(self)
       }
 
     case x:ResponseEvent[_] =>

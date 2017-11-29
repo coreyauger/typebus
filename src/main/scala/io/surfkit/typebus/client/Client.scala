@@ -29,14 +29,8 @@ class Client[Api : Manifest](mapper: io.surfkit.typebus.Mapper)(implicit system:
   ))
 
   def wire[T <: m.Model, U <: m.Model](x: T)(implicit timeout:Timeout = Timeout(4 seconds)):Future[U] = {
-    val gather = system.actorOf(GatherActor.props(producer, mapper))
-    try {
-      (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
-    }catch{
-      case t: Throwable =>
-        gather ! PoisonPill
-        Future.failed(t)
-    }
+    val gather = system.actorOf(GatherActor.props(producer, mapper, timeout))
+    (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
   }
 
   //@TypeBusClient("")

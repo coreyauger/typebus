@@ -6,7 +6,7 @@ import io.surfkit.typebus.event.PublishedEvent
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 
 object ProducerActor{
-  def props(producer: Producer[Array[Byte], String], mapper: Mapper): Props = Props(classOf[GatherActor], producer, mapper)
+  def props(producer: Producer[Array[Byte], String], mapper: Mapper): Props = Props(classOf[ProducerActor], producer, mapper)
 }
 
 class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) extends Actor with ActorLogging {

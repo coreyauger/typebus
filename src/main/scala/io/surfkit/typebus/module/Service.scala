@@ -64,6 +64,7 @@ trait Service[Api] extends Module{
         handleEvent(event.payload).map( x => (msg, event, x) ).recover{
           case t: Throwable =>
             println(s"ERROR handling event: ${event.payload.getClass.getName}")
+            println(s"ERROR payload: ${event.payload}")
             t.printStackTrace()
             throw t
         }

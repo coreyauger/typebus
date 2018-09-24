@@ -4,7 +4,6 @@ import akka.actor.{ActorSystem, PoisonPill}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.actors.GatherActor
 import org.apache.kafka.clients.producer.KafkaProducer
-import io.surfkit.typebus.macros.TypeBusClient
 
 import scala.concurrent.Future
 import scala.concurrent.duration._

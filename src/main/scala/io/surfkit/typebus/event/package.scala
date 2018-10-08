@@ -20,13 +20,15 @@ package object event {
                        payload: T
                      )*/
 
-  case class SocketEvent[T](
+  sealed trait Tb{}
+
+  final case class SocketEvent[T](
                              correlationId: String,
                              occurredAt: DateTime,
                              payload: T
-                           ) extends m.Model
+                           ) extends Tb
 
-  case class PublishedEvent[T](
+  final case class PublishedEvent[T](
                                 eventId: String,
                                 eventType: String,
                                 source: String,
@@ -36,7 +38,7 @@ package object event {
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,
                                 payload: T
-                              ) extends m.Model{
+                              ) extends Tb{
 
     def toReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
       eventId = eventId,
@@ -85,29 +87,9 @@ package object event {
                                 occurredAt: DateTime,
                                 publishedAt: DateTime,
                                 payload: T
-                              ) extends m.Model
+                              ) extends Tb
 
 
- // trait RpcCall[T <: m.Model, U <: m.Model]{
-    //val ttag: ClassTag[U]
-    //val result = Promise[ttag.runtimeClass.asInstanceOf[Class[U]]]
-  //}
-   /*@implicitNotFound(
-     "No Rpc definition found for type ${T}. Try to implement an implicit RpcCall for this type."
-   )
-  class RpcCall[T <: m.Model, U <: m.Model](implicit val ttag: ClassTag[U]){
-    val ctype = ttag.runtimeClass.asInstanceOf[Class[U]]
-
-    def result: Promise[U] = {
-      Promise.getClass.getConstructors.head.newInstance(null, ttag).asInstanceOf[Promise[U]]
-    }//Promise[Any]().asInstanceOf[Promise[U]]
-    //val result = Promise[ctype.getClass]()
-  }
-
-  object Rpc {
-    //def toRpc[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.result
-    def test[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.ctype
-  }*/
 }
 
 

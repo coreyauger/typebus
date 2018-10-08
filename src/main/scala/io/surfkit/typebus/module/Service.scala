@@ -9,7 +9,7 @@ import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
 import akka.stream.scaladsl.Sink
 import akka.util.Timeout
-import io.surfkit.typebus.Mapper
+import io.surfkit.typebus.{ByteStreamReader, Mapper}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -21,12 +21,12 @@ import scala.reflect.ClassTag
 /**
   * Created by suroot on 21/12/16.
   */
-trait Service[Api] extends Module{
+trait Service extends Module{
 
-  def perform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
+  def perform[T : ClassTag, U <: AnyVal](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[PublishedEvent[U]] ) =
+    op(p)
 
-
-  def startService(consumerSettings: ConsumerSettings[Array[Byte], String], mapper: Mapper, api: Api)(implicit system: ActorSystem) = {
+  def startService(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]])(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -34,8 +34,8 @@ trait Service[Api] extends Module{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any), Future[Done]]{
-      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = {
+    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], Any), Future[Done]]{
+      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], Any) ) = {
         //println("replyAndCommit")
         implicit val timeout = Timeout(4 seconds)
         //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
@@ -54,17 +54,19 @@ trait Service[Api] extends Module{
           x._1.committableOffset.commitScaladsl()
         }
       }
-      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], Any) ) = true
+      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], Any) ) = true
     }
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(4) { msg =>
-        val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
-        val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
-        handleEvent(event.payload).map( x => (msg, event, x) ).recover{
+        val reader = listOfImplicits(msg.record.topic())
+        val publish = reader.read(msg.record.value())
+        val event = publish.payload
+        //val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValue(publish.payload)) )
+        handleEvent(event).map( x => (msg, publish, x) ).recover{
           case t: Throwable =>
-            println(s"ERROR handling event: ${event.payload.getClass.getName}")
-            println(s"ERROR payload: ${event.payload}")
+            println(s"ERROR handling event: ${event.getClass.getName}")
+            println(s"ERROR payload: ${event}")
             t.printStackTrace()
             throw t
         }

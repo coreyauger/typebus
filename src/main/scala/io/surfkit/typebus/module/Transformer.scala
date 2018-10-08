@@ -17,11 +17,12 @@ import scala.reflect.ClassTag
 /**
   * Created by suroot on 21/12/16.
   */
+/*
 trait Transformer extends Module{
 
   def transform[T <: m.Model : ClassTag](p: PartialFunction[T, Future[m.Model]]) = op(p)
 
-  def startTransformer(consumerSettings: ConsumerSettings[Array[Byte], String], producerSettings: ProducerSettings[Array[Byte], String], mapper: Mapper)(implicit system: ActorSystem) = {
+  def startTransformer(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], producerSettings: ProducerSettings[Array[Byte], Array[Byte]], mapper: Mapper)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -29,11 +30,11 @@ trait Transformer extends Module{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-    val consumerToProducer = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model), ProducerMessage.Message[Array[Byte], String, ConsumerMessage.CommittableOffset]]{
-      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model) ) = {
-        ProducerMessage.Message(new ProducerRecord[Array[Byte], String](
+    val consumerToProducer = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], m.Model), ProducerMessage.Message[Array[Byte], Array[Byte], ConsumerMessage.CommittableOffset]]{
+      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], m.Model) ) = {
+        ProducerMessage.Message(new ProducerRecord[Array[Byte], Array[Byte]](
           x._3.getClass.getCanonicalName,
-          mapper.writeValueAsString(PublishedEvent(
+          mapper.writeValue(PublishedEvent(
             eventId = UUID.randomUUID.toString,
             eventType = x._3.getClass.getCanonicalName,
             userIdentifier = x._2.userIdentifier,
@@ -45,13 +46,13 @@ trait Transformer extends Module{
             payload = x._3))
         ), x._1.committableOffset)
       }
-      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], String],PublishedEvent[_], m.Model) ) = true
+      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent[_], m.Model) ) = true
     }
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(1) { msg =>
         val publish = mapper.readValue[PublishedEvent[m.Model]](msg.record.value())
-        val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValueAsString(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
+        val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValue(publish.payload)) )    // FIXME: we have to write and read again .. grrr !!
         println(s"event: ${event}")
         handleEvent(event.payload).map( x => (msg, event, x) )
       }
@@ -59,3 +60,4 @@ trait Transformer extends Module{
       .runWith(Producer.commitableSink(producerSettings))
   }
 }
+*/

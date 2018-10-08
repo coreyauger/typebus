@@ -1,11 +1,14 @@
 package io.surfkit.typebus
 
-import scala.reflect.ClassTag
+trait ByteStreamWriter[A]{
+  def write(value: A): Array[Byte]
+}
 
-/**
-  * Created by suroot on 21/12/16.
-  */
-trait Mapper {
-  def writeValueAsString[T](value: T): String
-  def readValue[T : ClassTag](content: String): T
+trait ByteStreamReader[A]{
+  def read(bytes: Array[Byte]): A
+}
+
+object Mapper{
+  def toByteStream[A](value: A)(implicit writer: ByteStreamWriter[A]): Array[Byte] = writer.write(value)
+  def fromByteStream[A](bytes: Array[Byte])(implicit reader: ByteStreamReader[A]): A = reader.read(bytes)
 }

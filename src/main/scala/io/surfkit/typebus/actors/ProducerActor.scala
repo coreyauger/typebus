@@ -5,11 +5,12 @@ import io.surfkit.typebus.Mapper
 import io.surfkit.typebus.event.PublishedEvent
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 
+/*
 object ProducerActor{
-  def props(producer: Producer[Array[Byte], String], mapper: Mapper): Props = Props(classOf[ProducerActor], producer, mapper)
+  def props(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper): Props = Props(classOf[ProducerActor], producer, mapper)
 }
 
-class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) extends Actor with ActorLogging {
+class ProducerActor(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper) extends Actor with ActorLogging {
   var replyTo:ActorRef = null
 
   def receive = {
@@ -18,9 +19,9 @@ class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) ext
         println(s"[ProducerActor] publish ${x.payload.getClass}")
         log.info(s"[ProducerActor] publish ${x.payload.getClass}")
         producer.send(
-          new ProducerRecord[Array[Byte], String](
+          new ProducerRecord[Array[Byte], Array[Byte]](
             x.payload.getClass.getCanonicalName,
-            mapper.writeValueAsString(x)
+            mapper.writeValue(x)
           )
         )
       }catch{
@@ -39,3 +40,4 @@ class ProducerActor(producer: Producer[Array[Byte], String], mapper: Mapper) ext
   }
 
 }
+*/

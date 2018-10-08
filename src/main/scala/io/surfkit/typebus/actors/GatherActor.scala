@@ -5,18 +5,18 @@ import java.util.UUID
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.cluster.Cluster
 import akka.util.Timeout
-import io.surfkit.typebus.Mapper
+import io.surfkit.typebus.{ByteStreamWriter, Mapper}
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 import org.joda.time.DateTime
 
 object GatherActor{
-  def props(producer: Producer[Array[Byte], String], mapper: Mapper, timeout: Timeout): Props = Props(classOf[GatherActor], producer, mapper, timeout)
+  def props[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[PublishedEvent[T]]): Props = Props(classOf[GatherActor[T]], producer, timeout, writer)
 
-  case class Request(data: m.Model)
+  case class Request[T](data: T)
 }
 
-class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper, timeout: Timeout) extends Actor with ActorLogging {
+class GatherActor[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[PublishedEvent[T]]) extends Actor with ActorLogging {
   val system = context.system
   import system.dispatcher
   
@@ -30,14 +30,14 @@ class GatherActor(producer: Producer[Array[Byte], String], mapper: Mapper, timeo
   }
 
   def receive = {
-    case msg: GatherActor.Request =>
+    case msg: GatherActor.Request[T] =>
       replyTo = context.sender()
       try {
         log.debug(s"[GatherActor] publish ${msg.data}")
         producer.send(
-          new ProducerRecord[Array[Byte], String](
+          new ProducerRecord[Array[Byte], Array[Byte]](
             msg.data.getClass.getCanonicalName,
-            mapper.writeValueAsString(PublishedEvent[m.Model](
+            writer.write(PublishedEvent[T](
               eventId = UUID.randomUUID.toString,
               eventType = msg.data.getClass.getCanonicalName,
               source = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}",

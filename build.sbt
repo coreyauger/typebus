@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-version in ThisBuild := "0.0.4-SNAPSHOT"
+version in ThisBuild := "0.0.5-SNAPSHOT"
 
 
 lazy val `type-bus` =
@@ -19,7 +19,8 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-stream" % akkaV,
   "com.typesafe.akka" %% "akka-cluster" % akkaV,
   "joda-time" % "joda-time" % "2.9.7",
-  "com.typesafe.akka" %% "akka-stream-kafka" % "0.13"
+  "com.sksamuel.avro4s" %% "avro4s-core" % "1.9.0",
+  "com.typesafe.akka" %% "akka-stream-kafka" % "0.22"
 )
 
 fork in ThisBuild := true

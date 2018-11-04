@@ -3,20 +3,21 @@ package io.surfkit.typebus.actors
 import java.util.UUID
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.cluster.Cluster
 import akka.util.Timeout
 import io.surfkit.typebus.{ByteStreamWriter, Mapper}
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 import org.joda.time.DateTime
 
+import scala.reflect.ClassTag
+
 object GatherActor{
-  def props[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[PublishedEvent[T]]): Props = Props(classOf[GatherActor[T]], producer, timeout, writer)
+  //def props[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[PublishedEvent]): Props = Props(classOf[GatherActor[T]], producer, timeout, writer)
 
   case class Request[T](data: T)
 }
-
-class GatherActor[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[PublishedEvent[T]]) extends Actor with ActorLogging {
+/*
+class GatherActor[T : ClassTag](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T]) extends Actor with ActorLogging {
   val system = context.system
   import system.dispatcher
   
@@ -37,7 +38,7 @@ class GatherActor[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Time
         producer.send(
           new ProducerRecord[Array[Byte], Array[Byte]](
             msg.data.getClass.getCanonicalName,
-            writer.write(PublishedEvent[T](
+            writer.write(PublishedEvent(
               eventId = UUID.randomUUID.toString,
               eventType = msg.data.getClass.getCanonicalName,
               source = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}",
@@ -74,3 +75,4 @@ class GatherActor[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Time
   }
 
 }
+*/

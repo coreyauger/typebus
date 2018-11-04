@@ -1,27 +1,32 @@
 package io.surfkit.typebus.actors
 
+import java.io.ByteArrayOutputStream
+
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import io.surfkit.typebus.Mapper
-import io.surfkit.typebus.event.PublishedEvent
+import com.sksamuel.avro4s._
+import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 
-/*
 object ProducerActor{
-  def props(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper): Props = Props(classOf[ProducerActor], producer, mapper)
+  def props(producer: Producer[Array[Byte], Array[Byte]]): Props = Props(classOf[ProducerActor], producer)
 }
 
-class ProducerActor(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper) extends Actor with ActorLogging {
-  var replyTo:ActorRef = null
+class ProducerActor(producer: Producer[Array[Byte], Array[Byte]]) extends Actor with ActorLogging {
 
   def receive = {
-    case x:PublishedEvent[_] =>
+    case x:PublishedEvent =>
       try {
-        println(s"[ProducerActor] publish ${x.payload.getClass}")
-        log.info(s"[ProducerActor] publish ${x.payload.getClass}")
+        val schema = AvroSchema[PublishedEvent]
+        val baos = new ByteArrayOutputStream()
+        val output = AvroOutputStream.binary[PublishedEvent].to(baos).build(schema)
+        output.write(x)
+        output.close()
+        println(s"[ProducerActor] publish ${x.meta.eventType}")
+        log.info(s"[ProducerActor] publish ${x.meta.eventType}")
         producer.send(
           new ProducerRecord[Array[Byte], Array[Byte]](
-            x.payload.getClass.getCanonicalName,
-            mapper.writeValue(x)
+            x.meta.eventType,
+            baos.toByteArray
           )
         )
       }catch{
@@ -32,7 +37,6 @@ class ProducerActor(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper
     case _ =>
       log.warning(s"ProducerActor ${self.path.toStringWithoutAddress} ...WTF WTF WTF !!!!!!!!")
       context.stop(self)
-
   }
 
   override def postStop() {
@@ -40,4 +44,3 @@ class ProducerActor(producer: Producer[Array[Byte], Array[Byte]], mapper: Mapper
   }
 
 }
-*/

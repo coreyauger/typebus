@@ -10,12 +10,11 @@ import org.apache.kafka.clients.producer.KafkaProducer
 import scala.concurrent.Future
 import scala.concurrent.duration._
 
-trait ApiClient[Api]
 /**
   * Created by suroot on 21/12/16.
   */
 
-class Client[Api : Manifest](implicit system: ActorSystem){
+class Client(implicit system: ActorSystem){
   import akka.pattern.ask
   import collection.JavaConversions._
   import akka.util.Timeout
@@ -29,12 +28,10 @@ class Client[Api : Manifest](implicit system: ActorSystem){
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
   ))
 
-  def wire[T, U](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[PublishedEvent[T]]) :Future[U] = {
-    val gather = system.actorOf(GatherActor.props(producer, timeout))
-    (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
-  }
-
-  //@TypeBusClient("")
-  //object api extends ApiClient[Api]
-
+  //def wire[T, U](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[PublishedEvent]) :Future[U] = {
+    //val gather = system.actorOf(GatherActor.props(producer, timeout))
+    //(gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
+  //}
 }
+
+

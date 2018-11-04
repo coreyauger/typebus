@@ -1,32 +1,41 @@
 package io.surfkit.typebus.module
 
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
-import io.surfkit.typebus.event.PublishedEvent
-
+import io.surfkit.typebus.event._
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
-/**
-  * Created by suroot on 21/12/16.
-  */
-trait Module {
+trait Module[UserBaseType] {
 
-  var listOfPartials = List.empty[PartialFunction[_, Future[AnyVal]]]
-  var listOfImplicits = Map.empty[String, ByteStreamReader[PublishedEvent[AnyVal]] ]
-  //var orchestration = List.empty[PartialFunction[PublishedEvent[m.Model], Future[m.Model]]]
-  var orchestrationMap = Map.empty[String, (PublishedEvent[AnyVal]) => Future[AnyVal]]
+  var listOfPartials = List.empty[PartialFunction[_, Future[UserBaseType]]]
+  var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[UserBaseType]]]
+  var listOfImplicitsReaders = Map.empty[String, ByteStreamReader[UserBaseType] ]
+  var listOfImplicitsWriters = Map.empty[String, ByteStreamWriter[UserBaseType] ]
   var listOfTopics = List.empty[String]
 
-  protected[this] def op[T : ClassTag, U <: AnyVal](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[PublishedEvent[U]] )  = {
+  protected[this] def op[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
     val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
+    val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
     listOfTopics = topic :: listOfTopics
     listOfPartials = p :: listOfPartials
-    listOfImplicits +=  (topic -> reader.asInstanceOf[ ByteStreamReader[PublishedEvent[AnyVal]] ])
+    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
+    listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
     println(s"partial: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 
-  protected[this] def funToPF[T : ClassTag : ByteStreamReader : ByteStreamWriter, S <: AnyVal : ByteStreamReader : ByteStreamWriter](f: (T) => Future[S]) = new PartialFunction[T, Future[S]] {
+  protected[this] def op2[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
+    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
+    val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
+    listOfTopics = topic :: listOfTopics
+    listOfPartialsWithMeta = p :: listOfPartialsWithMeta
+    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
+    listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
+    println(s"partial with meta: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
+    Unit
+  }
+
+  protected[this] def funToPF[T : ClassTag, S : ClassTag](f: (T) => Future[S]) = new PartialFunction[T, Future[S]] {
     def apply(x: T) = f(x.asInstanceOf[T])
     def isDefinedAt(x: T ) = x match{
       case _: T => true
@@ -34,33 +43,24 @@ trait Module {
     }
   }
 
-  /*protected[this] def funToPEF[T : ClassTag](f: (PublishedEvent[T]) => Future[m.Model]) = new PartialFunction[PublishedEvent[T], Future[m.Model]] {
-    def apply(x: PublishedEvent[T]) = f(x)
-    def isDefinedAt(x: PublishedEvent[T]) = x match{
+  protected[this] def funToPF2[T : ClassTag, S : ClassTag](f: (T, EventMeta) => Future[S]) = new PartialFunction[ (T,EventMeta), Future[S]] {
+    def apply(x: (T, EventMeta) ) = f(x._1.asInstanceOf[T], x._2)
+    def isDefinedAt(x: (T, EventMeta) ) = x._1 match{
       case _: T => true
       case _ => false
     }
   }
 
-  protected[this] def orchestrate[T : ClassTag, S <: AnyVal](p: (PublishedEvent[T]) => Future[S]) = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    listOfTopics = topic :: listOfTopics
-    //orchestration = p.asInstanceOf[PartialFunction[PublishedEvent[m.Model], Future[m.Model]]] :: orchestration
-    orchestrationMap += topic -> p.asInstanceOf[ (PublishedEvent[AnyVal]) => Future[S] ]
-    println(s"partial: ${p} ${topic}")
-    Unit
-  }
+  protected[this] lazy val handleEvent = listOfPartials.asInstanceOf[List[PartialFunction[Any, Future[Any]]]].foldRight[PartialFunction[Any, Future[Any]] ](
+    new PartialFunction[Any, Future[Any]] {
+      def apply(x: Any) = throw new RuntimeException(s"Type not supported ${x.getClass.getName}") // TODO: This needs to fail when we don't have the implicit
+      def isDefinedAt(x: Any ) = true
+    })( (a, b) => a.orElse(b) )
 
-
-  protected[this] def handleOrchestrate(event: PublishedEvent[AnyVal]) = {
-    val topic = event.payload.getClass.getCanonicalName
-    orchestrationMap(topic)(event)
-  }*/
-
-  protected[this] lazy val handleEvent = listOfPartials.asInstanceOf[List[PartialFunction[AnyVal, Future[AnyVal]]]].foldRight[PartialFunction[AnyVal, Future[AnyVal]] ](
-    new PartialFunction[AnyVal, Future[AnyVal]] {
-      def apply(x: AnyVal) = throw new RuntimeException(s"Type not supported ${x.getClass.getName}") // TODO: This needs to fail when we don't have the implicit
-      def isDefinedAt(x: AnyVal ) = true
+  protected[this] lazy val handleEventWithMeta = listOfPartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
+    new PartialFunction[ (Any, EventMeta), Future[Any]] {
+      def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getName}") // TODO: This needs to fail when we don't have the implicit
+      def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
 
 }

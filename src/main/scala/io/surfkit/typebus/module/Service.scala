@@ -1,8 +1,5 @@
 package io.surfkit.typebus.module
 
-import java.io.ByteArrayInputStream
-import java.util.UUID
-
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Consumer
@@ -13,16 +10,10 @@ import akka.util.Timeout
 import com.sksamuel.avro4s.{AvroInputStream, AvroSchema}
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import org.joda.time.DateTime
-
 import scala.reflect.ClassTag
 
-/**
-  * Created by suroot on 21/12/16.
-  */
 trait Service[UserBaseType] extends Module[UserBaseType]{
 
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
@@ -68,29 +59,23 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
-    println(s"STARTING TO LISTEN ON TOPICS:\n ${listOfTopics}")
+    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfTopics}")
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(4) { msg =>
-        println(s"Consumer got message: ${msg}")
-        println(s"got msg for topic: ${msg.record.topic()}")
-        val schema = AvroSchema[PublishedEvent]
-        val reader = listOfImplicitsReaders(msg.record.topic())
-        println(s"listOfImplicits: ${listOfImplicitsReaders}")
+        system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         try {
+          val schema = AvroSchema[PublishedEvent]
+          val reader = listOfImplicitsReaders(msg.record.topic())
           val input = AvroInputStream.binary[PublishedEvent].from(msg.record.value()).build(schema)
-
           val result = input.iterator.toSeq
-          println(s"got result: ${result}")
+          system.log.debug(s"TypeBus: got result: ${result}")
           val publish = result.head
-          println(s"got publish: ${publish}")
-          println(s"reader: ${reader}")
-          println(s"publish.payload.size: ${publish.payload.size}")
+          system.log.debug(s"TypeBus: got publish: ${publish}")
+          system.log.debug(s"TypeBus: reader: ${reader}")
+          system.log.debug(s"publish.payload.size: ${publish.payload.size}")
           val payload = reader.read(publish.payload)
-          println(s"got payload: ${payload}")
-
-          //val event = publish.copy(payload = mapper.readValue[m.Model](mapper.writeValue(publish.payload)) )
-
+          system.log.debug(s"TypeBus: got payload: ${payload}")
           if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
             handleEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
           else

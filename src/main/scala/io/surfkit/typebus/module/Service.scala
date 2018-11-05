@@ -18,15 +18,14 @@ import scala.reflect.ClassTag
 
 trait Service[UserBaseType] extends Module[UserBaseType]{
 
-  implicit val UnitWriter = new ByteStreamWriter[Unit]{
-    override def write(value: Unit): Array[Byte] = null
-  }
-
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op(funToPF(f))
 
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op2(funToPF2(f))
+
+  def registerStream[T <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
+    op2Unit(funToPF2Unit(f))
 
   def startService(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
     import system.dispatcher
@@ -75,7 +74,9 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
           system.log.debug(s"publish.payload.size: ${publish.payload.size}")
           val payload = reader.read(publish.payload)
           system.log.debug(s"TypeBus: got payload: ${payload}")
-          if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
+          if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
+            handleEventWithMetaUnit( (payload, publish.meta) ).map(x => (msg, publish, x))
+          else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
             handleEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
           else
             handleEvent(payload).map(x => (msg, publish, x))

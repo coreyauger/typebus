@@ -18,6 +18,10 @@ import scala.reflect.ClassTag
 
 trait Service[UserBaseType] extends Module[UserBaseType]{
 
+  implicit val UnitWriter = new ByteStreamWriter[Unit]{
+    override def write(value: Unit): Array[Byte] = null
+  }
+
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op(funToPF(f))
 
@@ -37,17 +41,19 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
         system.log.debug("TypeBus: replyAndCommit")
         system.log.debug(s"listOfImplicitsWriters: ${listOfImplicitsWriters}")
         system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
-        implicit val timeout = Timeout(4 seconds)
-        val writer = listOfImplicitsWriters(x._3.getClass.getCanonicalName)
-        system.log.debug(s"TypeBus writer: ${writer}")
-        replyTo ! PublishedEvent(
-          meta =  x._2.meta.copy(
-            eventId = UUID.randomUUID.toString,
-            eventType = x._3.getClass.getCanonicalName,
-            responseTo = Some(x._2.meta.eventId)
-          ),
-          payload = writer.write(x._3.asInstanceOf[UserBaseType]))
-          x._1.committableOffset.commitScaladsl()
+        if(x._3 != Unit) {
+          implicit val timeout = Timeout(4 seconds)
+          val writer = listOfImplicitsWriters(x._3.getClass.getCanonicalName)
+          system.log.debug(s"TypeBus writer: ${writer}")
+          replyTo ! PublishedEvent(
+            meta = x._2.meta.copy(
+              eventId = UUID.randomUUID.toString,
+              eventType = x._3.getClass.getCanonicalName,
+              responseTo = Some(x._2.meta.eventId)
+            ),
+            payload = writer.write(x._3.asInstanceOf[UserBaseType]))
+        }
+        x._1.committableOffset.commitScaladsl()
       }
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }

@@ -1,14 +1,5 @@
 package io.surfkit.typebus
 
-import org.joda.time.DateTime
-
-import java.util.UUID
-import scala.annotation.implicitNotFound
-import scala.concurrent.{Future, Promise}
-import scala.reflect.ClassTag
-import com.sksamuel.avro4s.{AvroSchema, RecordFormat}
-import com.sksamuel.avro4s.{RecordFormat, SchemaFor, ToRecord, FromRecord}
-
 package object event {
 
   sealed trait TypeBus{}
@@ -20,6 +11,7 @@ package object event {
                        userId: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,
+                       extra: Map[String, String] = Map.empty
                        /*occurredAt: DateTime*/) extends TypeBus
 
 
@@ -32,16 +24,6 @@ package object event {
                              meta: EventMeta,
                              payload: Array[Byte]
                               ) extends TypeBus
-
-
-  //implicit val schemaEventMeta = AvroSchema[EventMeta]
-  //implicit val formatEventMeta = RecordFormat[EventMeta]
-
-  //implicit val schemaSocket = AvroSchema[SocketEvent]
-  //implicit val formatSocket = RecordFormat[SocketEvent]
-
-  //implicit val schemaPublish = AvroSchema[PublishedEvent]
-  //implicit val formatPublish = RecordFormat[PublishedEvent]
 }
 
 

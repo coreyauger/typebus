@@ -53,13 +53,13 @@ trait Module[UserBaseType] {
 
   protected[this] lazy val handleEvent = listOfPartials.asInstanceOf[List[PartialFunction[Any, Future[Any]]]].foldRight[PartialFunction[Any, Future[Any]] ](
     new PartialFunction[Any, Future[Any]] {
-      def apply(x: Any) = throw new RuntimeException(s"Type not supported ${x.getClass.getName}") // TODO: This needs to fail when we don't have the implicit
+      def apply(x: Any) = throw new RuntimeException(s"Type not supported ${x.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: Any ) = true
     })( (a, b) => a.orElse(b) )
 
   protected[this] lazy val handleEventWithMeta = listOfPartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
     new PartialFunction[ (Any, EventMeta), Future[Any]] {
-      def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getName}") // TODO: This needs to fail when we don't have the implicit
+      def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
 

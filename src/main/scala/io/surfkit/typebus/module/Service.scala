@@ -1,7 +1,7 @@
 package io.surfkit.typebus.module
 
 import akka.Done
-import akka.actor.ActorSystem
+import akka.actor.{ActorRef, ActorSystem}
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
@@ -10,6 +10,8 @@ import akka.util.Timeout
 import com.sksamuel.avro4s.{AvroInputStream, AvroSchema}
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
+import java.util.UUID
+
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -22,7 +24,7 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op2(funToPF2(f))
 
-  def startService(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]])(implicit system: ActorSystem) = {
+  def startService(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -32,29 +34,20 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
 
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
-        //println("replyAndCommit")
+        system.log.debug("TypeBus: replyAndCommit")
+        system.log.debug(s"listOfImplicitsWriters: ${listOfImplicitsWriters}")
+        system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
         implicit val timeout = Timeout(4 seconds)
-        //println(s"Doing actor selection and send: ${x._3} => ${x._2.source}")
-        //println(s"Doing actor selection and send: ${x._2.source}")
-
-        system.actorSelection(x._2.meta.source).resolveOne().flatMap { actor =>
-          /*
-          actor ! PublishedEvent(
-            meta = EventMeta(
-              eventId = UUID.randomUUID.toString,
-              eventType = x._3.getClass.getCanonicalName,
-              userId = x._2.userId,
-              source = x._2.source,
-              socketId = x._2.socketId,
-              responseTo = Some(x._2.eventId),
-              publishedAt = new DateTime(),
-              occurredAt = new DateTime(),
-              correlationId = x._2.correlationId
-            ),
-            payload = x._3)
-            */
+        val writer = listOfImplicitsWriters(x._3.getClass.getCanonicalName)
+        system.log.debug(s"TypeBus writer: ${writer}")
+        replyTo ! PublishedEvent(
+          meta =  x._2.meta.copy(
+            eventId = UUID.randomUUID.toString,
+            eventType = x._3.getClass.getCanonicalName,
+            responseTo = Some(x._2.meta.eventId)
+          ),
+          payload = writer.write(x._3.asInstanceOf[UserBaseType]))
           x._1.committableOffset.commitScaladsl()
-        }
       }
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }

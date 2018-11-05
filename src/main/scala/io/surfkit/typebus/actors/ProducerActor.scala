@@ -2,7 +2,7 @@ package io.surfkit.typebus.actors
 
 import java.io.ByteArrayOutputStream
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, Props}
 import com.sksamuel.avro4s._
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}

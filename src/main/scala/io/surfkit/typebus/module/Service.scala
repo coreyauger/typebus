@@ -9,14 +9,16 @@ import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import com.sksamuel.avro4s.{AvroInputStream, AvroSchema}
 import io.surfkit.typebus.event._
-import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
+import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-trait Service[UserBaseType] extends Module[UserBaseType]{
+trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
+
+  val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
 
   def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op(funToPF(f))
@@ -65,10 +67,7 @@ trait Service[UserBaseType] extends Module[UserBaseType]{
         try {
           val schema = AvroSchema[PublishedEvent]
           val reader = listOfImplicitsReaders(msg.record.topic())
-          val input = AvroInputStream.binary[PublishedEvent].from(msg.record.value()).build(schema)
-          val result = input.iterator.toSeq
-          system.log.debug(s"TypeBus: got result: ${result}")
-          val publish = result.head
+          val publish = publishedEventReader.read(msg.record.value())
           system.log.debug(s"TypeBus: got publish: ${publish}")
           system.log.debug(s"TypeBus: reader: ${reader}")
           system.log.debug(s"publish.payload.size: ${publish.payload.size}")

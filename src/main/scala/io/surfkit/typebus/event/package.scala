@@ -24,6 +24,7 @@ package object event {
                              meta: EventMeta,
                              payload: Array[Byte]
                               ) extends TypeBus
+
 }
 
 

@@ -2,6 +2,7 @@ package io.surfkit.typebus.module
 
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.event._
+
 import scala.concurrent.Future
 import scala.reflect.ClassTag
 
@@ -87,5 +88,7 @@ trait Module[UserBaseType] {
       def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
+
+
 
 }

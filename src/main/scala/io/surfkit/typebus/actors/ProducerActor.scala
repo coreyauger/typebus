@@ -1,9 +1,7 @@
 package io.surfkit.typebus.actors
 
-import java.io.ByteArrayOutputStream
-
 import akka.actor.{Actor, ActorLogging, Props}
-import com.sksamuel.avro4s._
+import io.surfkit.typebus.AvroByteStreams
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 
@@ -11,22 +9,18 @@ object ProducerActor{
   def props(producer: Producer[Array[Byte], Array[Byte]]): Props = Props(classOf[ProducerActor], producer)
 }
 
-class ProducerActor(producer: Producer[Array[Byte], Array[Byte]]) extends Actor with ActorLogging {
+class ProducerActor(producer: Producer[Array[Byte], Array[Byte]]) extends Actor with ActorLogging with AvroByteStreams {
+
+  val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
 
   def receive = {
     case x:PublishedEvent =>
       try {
-        val schema = AvroSchema[PublishedEvent]
-        val baos = new ByteArrayOutputStream()
-        val output = AvroOutputStream.binary[PublishedEvent].to(baos).build(schema)
-        output.write(x)
-        output.close()
-        println(s"[ProducerActor] publish ${x.meta.eventType}")
         log.info(s"[ProducerActor] publish ${x.meta.eventType}")
         producer.send(
           new ProducerRecord[Array[Byte], Array[Byte]](
             x.meta.eventType,
-            baos.toByteArray
+            publishedEventWriter.write(x)
           )
         )
       }catch{

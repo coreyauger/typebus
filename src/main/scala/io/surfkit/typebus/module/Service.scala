@@ -29,7 +29,7 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
   def registerStream[T <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
     op2Unit(funToPF2Unit(f))
 
-  def startService(consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
+  def startService(name: String, consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -60,6 +60,30 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
     }
 
     system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfTopics}")
+
+    val serviceDescription = ServiceDescriptor(
+      name = name,
+      schemaRepoUrl = "",
+      serviceMethods = listOfTopics.map{ x =>
+        ServiceMethod(InType(x), OutType(x))
+      }
+    )
+    val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
+
+    // broadcast our service description on startup...
+    if(replyTo != ActorRef.noSender) {
+      replyTo ! PublishedEvent(
+        meta = EventMeta(
+          eventId = UUID.randomUUID().toString,
+          eventType = serviceDescription.getClass.getCanonicalName,
+          source = "",
+          correlationId = None),
+        payload = serviceDescriptorWriter.write(serviceDescription))
+      // TODO: what about using the actor to pass this back to
+      // ie define an actor to grab this
+      // or try passing in the bus actor?
+    }
+
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(4) { msg =>

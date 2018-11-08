@@ -12,7 +12,7 @@ lazy val `type-bus` =
   //.settings(commonSettings:_*)
   //.settings(resolverSettings: _*)
 
-val akkaV = "2.5.14"
+val akkaV = "2.5.13"
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaV,

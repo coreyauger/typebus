@@ -5,7 +5,7 @@ import java.util.UUID
 import akka.actor._
 import akka.cluster.Cluster
 import akka.util.Timeout
-import io.surfkit.typebus.{AvroByteStreams, ByteStreamWriter}
+import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.Mapper._
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
@@ -14,12 +14,12 @@ import org.joda.time.DateTime
 import scala.reflect.ClassTag
 
 object GatherActor{
-  def props[T](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[PublishedEvent]): Props = Props(classOf[GatherActor[T]], producer, timeout, writer)
+  def props[T, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[T], reader: ByteStreamReader[U]): Props = Props(classOf[GatherActor[T, U]], producer, timeout, writer)
 
   case class Request[T](data: T)
 }
 
-class GatherActor[T : ClassTag](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T]) extends Actor with ActorLogging with AvroByteStreams{
+class GatherActor[T : ClassTag, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]) extends Actor with ActorLogging with AvroByteStreams{
   val system = context.system
   import system.dispatcher
   
@@ -67,7 +67,7 @@ class GatherActor[T : ClassTag](producer: Producer[Array[Byte], Array[Byte]], ti
 
     case x:PublishedEvent =>
       log.debug(s"GatherActor posting a reply.... ${x.payload.getClass.getSimpleName}")
-      replyTo ! x.payload
+      replyTo ! reader.read(x.payload)
       cancel.cancel()
       context.stop(self)
 

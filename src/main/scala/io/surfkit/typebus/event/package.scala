@@ -15,10 +15,11 @@ package object event {
 
 
   case class ServiceDescriptor(
-                              name: String,
-                              schemaRepoUrl: String,
+                              service: String,
                               serviceMethods: Seq[ServiceMethod]
                               ) extends TypeBus
+
+  case class GetServiceDescriptor(service: String) extends TypeBus
 
   case class EventMeta(eventId: String,
                        eventType: String,

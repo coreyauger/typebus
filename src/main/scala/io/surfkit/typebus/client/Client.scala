@@ -28,7 +28,7 @@ class Client(implicit system: ActorSystem){
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
   ))
 
-  def wire[T, U](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[PublishedEvent]) :Future[U] = {
+  def wire[T, U](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U] = {
     val gather = system.actorOf(GatherActor.props(producer, timeout))
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
   }

@@ -30,6 +30,10 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
     op2Unit(funToPF2Unit(f))
 
 
+  def registerServiceStream[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
+    op2Service(funToPF2(f))
+
+
   def replyToSender[U <: UserBaseType](meta: EventMeta, x: U)(implicit system: ActorSystem, writer: ByteStreamWriter[U], ex: ExecutionContext) = {
     implicit val timeout = Timeout(4 seconds)
     val publishedEvent = PublishedEvent(
@@ -43,6 +47,9 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
   }
 
 
+
+
+
   def startService(name: String, consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
     println(s"START SERVICE: ${name} with replyTo: ${replyTo}  +++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 
@@ -53,6 +60,27 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
 
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
+    val serviceDescription = ServiceDescriptor(
+      service = name,
+      serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit")map{
+        case (in, out) =>
+          val reader = listOfImplicitsReaders(in)
+          val writer = listOfImplicitsWriters(out)
+          ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
+      }
+    )
+    implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
+    implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
+
+    // Service level event streams...
+    def getServiceDescriptor(x: GetServiceDescriptor, meta: EventMeta): Future[ServiceDescriptor] = {
+      println("**************** getServiceDescriptor")
+      println(serviceDescription)
+      Future.successful(serviceDescription)
+    }
+    registerServiceStream(getServiceDescriptor _)
+
+
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
         println("******** TypeBus: replyAndCommit")
@@ -60,16 +88,17 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
         system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
         if(x._3 != Unit) {
           implicit val timeout = Timeout(4 seconds)
-          val writer = listOfImplicitsWriters(x._3.getClass.getCanonicalName)
-          system.log.debug(s"TypeBus writer: ${writer}")
-
+          val retType = x._3.getClass.getCanonicalName
           val publishedEvent = PublishedEvent(
             meta = x._2.meta.copy(
               eventId = UUID.randomUUID.toString,
               eventType = x._3.getClass.getCanonicalName,
               responseTo = Some(x._2.meta.eventId)
             ),
-            payload = writer.write(x._3.asInstanceOf[UserBaseType]))
+            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
+              writer.write(x._3.asInstanceOf[TypeBus])
+            }.getOrElse(listOfImplicitsWriters(retType).write(x._3.asInstanceOf[UserBaseType]))
+          )
           x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
           replyTo ! publishedEvent
         }
@@ -81,12 +110,12 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
 
     system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfFunctions.map(_._1)}")
 
-    Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfFunctions.map(_._1):_*))
+    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)) :_*))
       .mapAsyncUnordered(4) { msg =>
         system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         try {
           val schema = AvroSchema[PublishedEvent]
-          val reader = listOfImplicitsReaders(msg.record.topic())
+          val reader = listOfServiceImplicitsReaders.get(msg.record.topic()).getOrElse(listOfImplicitsReaders(msg.record.topic()))
           val publish = publishedEventReader.read(msg.record.value())
           system.log.debug(s"TypeBus: got publish: ${publish}")
           system.log.debug(s"TypeBus: reader: ${reader}")
@@ -97,6 +126,8 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
             handleEventWithMetaUnit( (payload, publish.meta) ).map(x => (msg, publish, x))
           else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
             handleEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
+          else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
+            handleServiceEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
           else
             handleEvent(payload).map(x => (msg, publish, x))
         }catch{
@@ -108,19 +139,6 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
       .mapAsyncUnordered(4)(replyAndCommit)
       .runWith(Sink.ignore)
 
-
-
-    val serviceDescription = ServiceDescriptor(
-      name = name,
-      schemaRepoUrl = "",
-      serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit")map{
-        case (in, out) =>
-          val reader = listOfImplicitsReaders(in)
-          val writer = listOfImplicitsWriters(out)
-          ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
-      }
-    )
-    val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
 
     // broadcast our service description on startup...
     if(replyTo != ActorRef.noSender) {

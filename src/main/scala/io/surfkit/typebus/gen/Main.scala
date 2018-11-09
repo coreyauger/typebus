@@ -1,15 +1,19 @@
 package io.surfkit.typebus.gen
 
+import java.util.UUID
+
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerSettings
 import avrohugger.Generator
 import com.typesafe.config.ConfigFactory
-import io.surfkit.typebus.event.{EventMeta, ServiceDescriptor, TypeBus}
+import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import avrohugger.format.Standard
 import avrohugger.types.ScalaCaseObjectEnum
+import io.surfkit.typebus.actors.ProducerActor
+import org.apache.kafka.clients.producer.KafkaProducer
 
 import concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -19,8 +23,7 @@ import concurrent.duration._
 object Main extends App with Service[TypeBus] {
   Console.println("Typebus Generator with args: " + (args mkString ", "))
 
-  class ServiceThread(squbs: String, args: Array[String]) extends Thread {
-
+  /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
     override def run() {
       println(s"squbs: ${squbs}")
       println(s"Class: ${Class.forName(squbs)}")
@@ -28,7 +31,7 @@ object Main extends App with Service[TypeBus] {
       val main = methods.filter(_.getName == "main").head
       main.invoke(null, args.drop(1))
     }
-  }
+  }*/
 
   // TODO: need to abstract away the bus layer more then this..
   val cfg = ConfigFactory.load
@@ -40,10 +43,17 @@ object Main extends App with Service[TypeBus] {
     .withBootstrapServers(kafka)
     .withGroupId("tally")
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
+  import collection.JavaConversions._
+  val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
+    "bootstrap.servers" -> kafka,
+    "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
+    "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
+  ))
+  val bus = system.actorOf(ProducerActor.props(producer))
 
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
 
-  def getServiceDescription(serviceDescriptor: ServiceDescriptor, meta: EventMeta): Future[Unit] = {
+  def genServiceDescription(serviceDescriptor: ServiceDescriptor, meta: EventMeta): Future[Unit] = {
     println("getServiceDescription !!!!")
     println(serviceDescriptor)
     println(s"meta: ${meta}")
@@ -80,7 +90,7 @@ object Main extends App with Service[TypeBus] {
       (ServiceMethodGenerator(Fqn(serviceMethod.in.fqn), Fqn(serviceMethod.out.fqn)), (generatedInCaseClass ::: generatedOutCaseClass).toSet[GeneratedCaseClass] )
     }.unzip
 
-    val serviceGenerator = ServiceGenerator(serviceName = "SomeName", methods = generatedDescriptor._1, caseClasses = generatedDescriptor._2.flatten.toSet[GeneratedCaseClass])
+    val serviceGenerator = ServiceGenerator(serviceName = serviceDescriptor.service, methods = generatedDescriptor._1, caseClasses = generatedDescriptor._2.flatten.toSet[GeneratedCaseClass])
 
     println(s"generatedDescriptor: ${serviceGenerator}")
     ScalaCodeWriter.writeCodeToFiles(serviceGenerator)
@@ -88,13 +98,27 @@ object Main extends App with Service[TypeBus] {
   }
 
 
-  registerStream(getServiceDescription _)
+  registerStream(genServiceDescription _)
   startService("",consumerSettings, akka.actor.ActorRef.noSender)
 
-  val squbs = "org.squbs.unicomplex.Bootstrap"  // TODO: this is arg(0)
-  val thread = new ServiceThread(squbs, args)
-  thread.setDaemon(false)
-  thread.start()
-  println("THREAD JOIN ==========================================================================================")
-  thread.join()
+  val getServiceDescriptor = GetServiceDescriptor("twitter")
+  val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
+
+  println(s"*** Calling getServiceDescriptor: ${getServiceDescriptor}")
+  bus ! PublishedEvent(
+    meta = EventMeta(
+      eventId = UUID.randomUUID().toString,
+      eventType = getServiceDescriptor.getClass.getCanonicalName,
+      source = "",
+      correlationId = None
+    ),
+    payload = getServiceDescriptorWriter.write(getServiceDescriptor)
+  )
+
+  //val squbs = "org.squbs.unicomplex.Bootstrap"  // TODO: this is arg(0)
+  //val thread = new ServiceThread(squbs, args)
+  //thread.setDaemon(false)
+  //thread.start()
+  //println("THREAD JOIN ==========================================================================================")
+  //thread.join()
 }

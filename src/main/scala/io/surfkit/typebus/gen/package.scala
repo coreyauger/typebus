@@ -36,7 +36,9 @@ package object gen {
         case (packageName, classes) =>
           val sb = new StringBuffer()
           sb.append("/** MACHINE-GENERATED FROM AVRO SCHEMA. DO NOT EDIT DIRECTLY */\n\n")
-          sb.append(s"package ${packageName.split('.').reverse.drop(1).reverse}\n\n")
+          sb.append(s"package ${packageName.split('.').reverse.drop(1).reverse.mkString(".")}\n\n")
+          sb.append("import akka.actor.ActorSystem\n")
+          sb.append("import scala.concurrent.Future\n")
           sb.append("import io.surfkit.typebus._\n")
           sb.append("import io.surfkit.typebus.client._\n\n")
           sb.append(s"package object ${packageName.split('.').last}{\n\n")
@@ -50,15 +52,16 @@ package object gen {
           }.mkString("") )
           sb.append(s"\n  }")
           // add the client mappings...
-          sb.append("\n\n  /** Generated Actor Client */")
+          sb.append("\n\n  /** Generated Actor Client */\n")
 
-          sb.append(s"  class ${generator.serviceName}Client(implicit system: ActorSystem) extends Client(system){\n")
+          sb.append(s"  class ${generator.serviceName}Client(implicit system: ActorSystem) extends Client{\n")
+          sb.append( "    import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           val fqlToCaseClass = classes.map(x => x.fqn -> x).toMap
           sb.append( methodsInThisPackage.map{ method =>
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"   def ${inType.simpleName}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
+            s"     def ${inType.simpleName}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
           }.mkString("\n") )
           sb.append(s"\n  }")
 
@@ -76,12 +79,12 @@ package object gen {
             Files.createDirectories(modelPath)
           val filePath = Paths.get( path.mkString("/") + "/data2.scala" )
           println(s"modelPath: ${modelPath}")
-          if(!Files.exists(filePath)){
-            println(s"file path: ${filePath}")
-            Files.write(filePath, sourceCode.getBytes)
-          }
-
+          //if(!Files.exists(filePath)){
+          println(s"file path: ${filePath}")
+          Files.write(filePath, sourceCode.getBytes)
       }
+
     }
   }
+
 }

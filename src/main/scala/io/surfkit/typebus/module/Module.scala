@@ -13,12 +13,12 @@ trait Module[UserBaseType] {
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
   var listOfImplicitsReaders = Map.empty[String, ByteStreamReader[UserBaseType] ]
   var listOfImplicitsWriters = Map.empty[String, ByteStreamWriter[UserBaseType] ]
-  var listOfTopics = List.empty[String]
+  var listOfFunctions = List.empty[(String, String)]
 
   protected[this] def op[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
     val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
-    listOfTopics = topic :: listOfTopics
+    listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartials = p :: listOfPartials
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
@@ -29,7 +29,7 @@ trait Module[UserBaseType] {
   protected[this] def op2[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
     val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
-    listOfTopics = topic :: listOfTopics
+    listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
@@ -39,7 +39,7 @@ trait Module[UserBaseType] {
 
   protected[this] def op2Unit[T <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] )  = {
     val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    listOfTopics = topic :: listOfTopics
+    listOfFunctions = (topic, "scala.Unit") :: listOfFunctions
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     println(s"partial with meta unit: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")

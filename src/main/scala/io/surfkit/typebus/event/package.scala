@@ -8,8 +8,8 @@ package object event {
     def fqn: String
   }
 
-  case class InType(fqn: String) extends EventType
-  case class OutType(fqn: String) extends EventType
+  case class InType(fqn: String, schema: String) extends EventType
+  case class OutType(fqn: String, schema: String) extends EventType
 
   case class ServiceMethod(in: InType, out: OutType) extends TypeBus
 

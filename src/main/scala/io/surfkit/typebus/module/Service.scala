@@ -79,9 +79,9 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
-    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfTopics}")
+    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfFunctions.map(_._1)}")
 
-    Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
+    Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfFunctions.map(_._1):_*))
       .mapAsyncUnordered(4) { msg =>
         system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         try {
@@ -113,8 +113,11 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
     val serviceDescription = ServiceDescriptor(
       name = name,
       schemaRepoUrl = "",
-      serviceMethods = listOfTopics.map{ x =>
-        ServiceMethod(InType(x), OutType(x))
+      serviceMethods = listOfFunctions.map{
+        case (in, out) =>
+          val reader = listOfImplicitsReaders(in)
+          val writer = listOfImplicitsWriters(out)
+          ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
       }
     )
     val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]

@@ -4,11 +4,15 @@ import java.io.ByteArrayOutputStream
 
 import com.sksamuel.avro4s._
 
-trait ByteStreamWriter[A]{
+trait Schemacha{
+  def schema: String
+}
+
+trait ByteStreamWriter[A] extends Schemacha{
   def write(value: A): Array[Byte]
 }
 
-trait ByteStreamReader[A]{
+trait ByteStreamReader[A] extends Schemacha{
   def read(bytes: Array[Byte]): A
 }
 
@@ -21,21 +25,23 @@ object Mapper{
 trait AvroByteStreams{
 
   class AvroByteStreamReader[T : SchemaFor : Decoder] extends ByteStreamReader[T]{
-    val schema = AvroSchema[T]
+    val avroSchema = AvroSchema[T]
     override def read(bytes: Array[Byte]): T = {
-      val input = AvroInputStream.binary[T].from(bytes).build(schema)
+      val input = AvroInputStream.binary[T].from(bytes).build(avroSchema)
       val result = input.iterator.toSeq
       result.head
     }
+    override def schema: String = avroSchema.toString
   }
   class AvroByteStreamWriter[T : SchemaFor : Encoder] extends ByteStreamWriter[T]{
-    val schema = AvroSchema[T]
+    val avroSchema = AvroSchema[T]
     override def write(obj: T): Array[Byte] = {
       val baos = new ByteArrayOutputStream()
-      val output = AvroOutputStream.binary[T].to(baos).build(schema)
+      val output = AvroOutputStream.binary[T].to(baos).build(avroSchema)
       output.write(obj)
       output.close()
       baos.toByteArray
     }
+    override def schema: String = avroSchema.toString
   }
 }

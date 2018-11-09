@@ -21,7 +21,8 @@ libraryDependencies ++= Seq(
   "ch.qos.logback" % "logback-classic" % "1.2.3",
   "joda-time" % "joda-time" % "2.9.7",
   "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2",
-  "com.typesafe.akka" %% "akka-stream-kafka" % "0.22"
+  "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",
+  "com.julianpeeters" %% "avrohugger-core" % "1.0.0-RC14"
 )
 
 fork in ThisBuild := true

@@ -16,6 +16,9 @@ val akkaV = "2.5.13"
 
 libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-actor" % akkaV,
+  "com.typesafe.akka" %% "akka-cluster" % akkaV,
+  "com.typesafe.akka" %% "akka-slf4j" % akkaV,
+  "ch.qos.logback" % "logback-classic" % "1.2.3",
   "joda-time" % "joda-time" % "2.9.7",
   "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2",
   "com.typesafe.akka" %% "akka-stream-kafka" % "0.22"

@@ -24,6 +24,7 @@ package object event {
                        eventType: String,
                        source: String,
                        correlationId: Option[String],
+                       directReply: Option[String] = None,
                        userId: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,

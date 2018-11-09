@@ -12,7 +12,7 @@ import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
@@ -29,7 +29,23 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
   def registerStream[T <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
     op2Unit(funToPF2Unit(f))
 
+
+  def replyToSender[U <: UserBaseType](meta: EventMeta, x: U)(implicit system: ActorSystem, writer: ByteStreamWriter[U], ex: ExecutionContext) = {
+    implicit val timeout = Timeout(4 seconds)
+    val publishedEvent = PublishedEvent(
+      meta = meta.copy(
+        eventId = UUID.randomUUID.toString,
+        eventType = x.getClass.getCanonicalName,
+        responseTo = Some(meta.eventId)
+      ),
+      payload = writer.write(x))
+      meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+  }
+
+
   def startService(name: String, consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
+    println(s"START SERVICE: ${name} with replyTo: ${replyTo}  +++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+
     import system.dispatcher
     val decider: Supervision.Decider = {
       case _ => Supervision.Resume  // Never give up !
@@ -39,51 +55,31 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
 
     val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
       def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
-        system.log.debug("TypeBus: replyAndCommit")
+        println("******** TypeBus: replyAndCommit")
         system.log.debug(s"listOfImplicitsWriters: ${listOfImplicitsWriters}")
         system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
         if(x._3 != Unit) {
           implicit val timeout = Timeout(4 seconds)
           val writer = listOfImplicitsWriters(x._3.getClass.getCanonicalName)
           system.log.debug(s"TypeBus writer: ${writer}")
-          replyTo ! PublishedEvent(
+
+          val publishedEvent = PublishedEvent(
             meta = x._2.meta.copy(
               eventId = UUID.randomUUID.toString,
               eventType = x._3.getClass.getCanonicalName,
               responseTo = Some(x._2.meta.eventId)
             ),
             payload = writer.write(x._3.asInstanceOf[UserBaseType]))
+          x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+          replyTo ! publishedEvent
         }
+        println("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         x._1.committableOffset.commitScaladsl()
       }
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
     system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfTopics}")
-
-    val serviceDescription = ServiceDescriptor(
-      name = name,
-      schemaRepoUrl = "",
-      serviceMethods = listOfTopics.map{ x =>
-        ServiceMethod(InType(x), OutType(x))
-      }
-    )
-    val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
-
-    // broadcast our service description on startup...
-    if(replyTo != ActorRef.noSender) {
-      replyTo ! PublishedEvent(
-        meta = EventMeta(
-          eventId = UUID.randomUUID().toString,
-          eventType = serviceDescription.getClass.getCanonicalName,
-          source = "",
-          correlationId = None),
-        payload = serviceDescriptorWriter.write(serviceDescription))
-      // TODO: what about using the actor to pass this back to
-      // ie define an actor to grab this
-      // or try passing in the bus actor?
-    }
-
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(listOfTopics:_*))
       .mapAsyncUnordered(4) { msg =>
@@ -111,5 +107,32 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
       }
       .mapAsyncUnordered(4)(replyAndCommit)
       .runWith(Sink.ignore)
+
+
+
+    val serviceDescription = ServiceDescriptor(
+      name = name,
+      schemaRepoUrl = "",
+      serviceMethods = listOfTopics.map{ x =>
+        ServiceMethod(InType(x), OutType(x))
+      }
+    )
+    val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
+
+    // broadcast our service description on startup...
+    if(replyTo != ActorRef.noSender) {
+      println("BROADCAST: ServiceDescriptor ****************************************************************************")
+      println(s"replyTo: ${replyTo}")
+      replyTo ! PublishedEvent(
+        meta = EventMeta(
+          eventId = UUID.randomUUID().toString,
+          eventType = serviceDescription.getClass.getCanonicalName,
+          source = "",
+          correlationId = None),
+        payload = serviceDescriptorWriter.write(serviceDescription))
+      // TODO: what about using the actor to pass this back to
+      // ie define an actor to grab this
+      // or try passing in the bus actor?
+    }
   }
 }

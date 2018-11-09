@@ -14,7 +14,7 @@ import org.joda.time.DateTime
 import scala.reflect.ClassTag
 
 object GatherActor{
-  def props[T, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout)(implicit writer: ByteStreamWriter[T], reader: ByteStreamReader[U]): Props = Props(classOf[GatherActor[T, U]], producer, timeout, writer)
+  def props[T, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]): Props = Props(classOf[GatherActor[T, U]], producer, timeout, writer)
 
   case class Request[T](data: T)
 }

@@ -1,6 +1,6 @@
 package io.surfkit.typebus.client
 
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.actor.{ActorSystem, PoisonPill, Props}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.actors.GatherActor
@@ -9,6 +9,7 @@ import org.apache.kafka.clients.producer.KafkaProducer
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 /**
   * Created by suroot on 21/12/16.
@@ -28,8 +29,8 @@ class Client(implicit system: ActorSystem){
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
   ))
 
-  def wire[T, U](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U] = {
-    val gather = system.actorOf(GatherActor.props(producer, timeout))
+  def wire[T : ClassTag, U : ClassTag](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U] = {
+    val gather = system.actorOf(Props(new GatherActor[T, U](producer, timeout, w, r)))
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U])
   }
 }

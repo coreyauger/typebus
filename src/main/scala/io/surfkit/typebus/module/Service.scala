@@ -126,6 +126,7 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
     if(replyTo != ActorRef.noSender) {
       println("BROADCAST: ServiceDescriptor ****************************************************************************")
       println(s"replyTo: ${replyTo}")
+      println(s"serviceDescription: ${serviceDescription}")
       replyTo ! PublishedEvent(
         meta = EventMeta(
           eventId = UUID.randomUUID().toString,

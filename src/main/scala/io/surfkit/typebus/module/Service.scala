@@ -113,7 +113,7 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
     val serviceDescription = ServiceDescriptor(
       name = name,
       schemaRepoUrl = "",
-      serviceMethods = listOfFunctions.map{
+      serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit")map{
         case (in, out) =>
           val reader = listOfImplicitsReaders(in)
           val writer = listOfImplicitsWriters(out)

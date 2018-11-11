@@ -1,10 +1,9 @@
 package io.surfkit.typebus.client
 
-import akka.actor.{ActorSystem, PoisonPill, Props}
+import akka.actor.{ActorSystem, Props}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.actors.GatherActor
-import io.surfkit.typebus.event.PublishedEvent
 import org.apache.kafka.clients.producer.KafkaProducer
 
 import scala.concurrent.Future

@@ -15,13 +15,14 @@ import avrohugger.types.ScalaCaseObjectEnum
 import io.surfkit.typebus.actors.ProducerActor
 import org.apache.kafka.clients.producer.KafkaProducer
 
-import concurrent.{Await, ExecutionContext, Future}
-import scala.concurrent.ExecutionContext.Implicits.global
-import concurrent.duration._
+import concurrent.Future
 
-
+/***
+  * App to generate source code for a service.
+  * This is just a Typebus Service[TypeBus]
+  */
 object Main extends App with Service[TypeBus] {
-  Console.println("Typebus Generator with args: " + (args mkString ", "))
+  println("Typebus Generator with args: " + (args mkString ", "))
 
   /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
     override def run() {
@@ -53,6 +54,12 @@ object Main extends App with Service[TypeBus] {
 
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
 
+  /***
+    * genServiceDescription - this is in fact just a service function that responds to a broadcast for ServiceDefinitons
+    * @param serviceDescriptor - The ServiceDescriptor received back from broadcast
+    * @param meta - EventMeta The routing for this event.
+    * @return - Unit this is a sink
+    */
   def genServiceDescription(serviceDescriptor: ServiceDescriptor, meta: EventMeta): Future[Unit] = {
     println("getServiceDescription !!!!")
     println(serviceDescriptor)

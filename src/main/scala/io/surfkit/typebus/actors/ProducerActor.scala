@@ -9,6 +9,11 @@ object ProducerActor{
   def props(producer: Producer[Array[Byte], Array[Byte]]): Props = Props(classOf[ProducerActor], producer)
 }
 
+/***
+  * ProducerActor - wraps the bus and publishes request to it. (Kafka / Kinesis)
+  * Note that we wrap all messages on the bus in a PublishedEvent
+  * @param producer - The underlying bus provider (Kafka / Kinesis)
+  */
 class ProducerActor(producer: Producer[Array[Byte], Array[Byte]]) extends Actor with ActorLogging with AvroByteStreams {
 
   val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]

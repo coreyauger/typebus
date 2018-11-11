@@ -6,7 +6,6 @@ import akka.actor._
 import akka.cluster.Cluster
 import akka.util.Timeout
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
-import io.surfkit.typebus.Mapper._
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{Producer, ProducerRecord}
 import org.joda.time.DateTime
@@ -16,9 +15,24 @@ import scala.reflect.ClassTag
 object GatherActor{
   def props[T, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]): Props = Props(classOf[GatherActor[T, U]], producer, timeout, writer)
 
+  /***
+    * Request - wrapper for the service call request type T
+    * @param data - The service call of type T
+    * @tparam T - The service call type
+    */
   case class Request[T](data: T)
 }
 
+/***
+  * GatherActor - An actor per request RPC actor
+  * @param producer - the bus producer to push a request onto the BUS
+  * @param timeout - a passed in configurable timeout for the request
+  * @param writer - ByteStreamWriter (defaults to avro)
+  * @param reader - ByteStreamReader (defaults to avro)
+  * @param ev$1 - evidence parameter
+  * @tparam T - The IN type for the service call
+  * @tparam U - The OUT type in the service called. Wrapped as Future[U]
+  */
 class GatherActor[T : ClassTag, U](producer: Producer[Array[Byte], Array[Byte]], timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]) extends Actor with ActorLogging with AvroByteStreams{
   val system = context.system
   import system.dispatcher

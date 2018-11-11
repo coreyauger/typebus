@@ -1,15 +1,28 @@
 package io.surfkit.typebus
 
-import java.nio.charset.StandardCharsets
-import java.nio.file.StandardOpenOption._
 import java.nio.file.{Files, Paths}
+
 
 package object gen {
 
+  /***
+    * Gen - base type for code generator
+    */
   sealed trait Gen{}
 
+  /***
+    * Fqn - wrap a Fully Qualified Name of a type.
+    * @param id - the Fully Qualified Name of a type.
+    */
   final case class Fqn(id: String) extends Gen
 
+  /***
+    * GeneratedCaseClass - The scala code for an avro generated case class type
+    * @param fqn - the Fully Qualified Name of a type.
+    * @param packageName - Package this cases class resides in.
+    * @param simpleName - The Simple Name for the case class
+    * @param caseClassRep - The scala source code for this type
+    */
   final case class GeneratedCaseClass(
                                  fqn: Fqn,
                                  packageName: String,
@@ -17,11 +30,22 @@ package object gen {
                                  caseClassRep: String
                                ) extends Gen
 
+  /***
+    * ServiceMethodGenerator - defines a service level function.
+    * @param in - The IN type for the service function
+    * @param out - The OUT type for the service function
+    */
   final case class ServiceMethodGenerator(
                                    in: Fqn,
                                    out: Fqn
                                    ) extends Gen
 
+  /***
+    * ServiceGenerator - Store information needed to generate types and RPC client to a service.
+    * @param serviceName - The name of the service
+    * @param methods - All the service level methods that have been declared.
+    * @param caseClasses - Scala case class generated for all the types required.
+    */
   final case class ServiceGenerator(
                              serviceName: String,
                              methods: Seq[ServiceMethodGenerator],
@@ -29,7 +53,15 @@ package object gen {
                              ) extends Gen
 
 
+  /***
+    * ScalaCodeWriter - Object that does all the code gen
+    */
   object ScalaCodeWriter{
+    /***
+      * writeService - write the source code needed to generate a service with types and RPC client.
+      * @param generator - ServiceGenerator definition
+      * @return - List of tuple containing (package name, source code).
+      */
     def writeService(generator: ServiceGenerator): List[(String, String)] = {
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
       generator.caseClasses.groupBy(_.packageName).map{
@@ -70,6 +102,10 @@ package object gen {
       }.toList
     }
 
+    /***
+      * writeCodeToFiles - writes the source code to the project directory to be compiled
+      * @param generator - ServiceGenerator definition
+      */
     def writeCodeToFiles(generator: ServiceGenerator) = {
       writeService(generator).foreach{
         case (packageName, sourceCode) =>

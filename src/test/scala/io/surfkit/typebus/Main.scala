@@ -4,7 +4,7 @@ package io.surfkit.typebus
   * Created by suroot on 22/12/16.
   */
 object Main extends App{
-  case class Number(x: Int) extends m.Model
+  case class Number(x: Int)
 
   trait MyApi{
     def add(x: Number, y: Number): Number

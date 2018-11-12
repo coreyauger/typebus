@@ -1,113 +1,103 @@
 package io.surfkit.typebus
 
-/**
-  * Created by suroot on 21/12/16.
-  */
-import org.joda.time.DateTime
-
-import java.util.UUID
-import scala.annotation.implicitNotFound
-import scala.concurrent.{Future, Promise}
-import scala.reflect.ClassTag
-
 package object event {
 
-  /*case class Event[T](
+  /***
+    * TypeBus - base type
+    */
+  sealed trait TypeBus{}
+
+  /***
+    *  EventType - wrap the Fully Qualified Name of a type
+    */
+  trait EventType{
+    /***
+      * fqn - Fully Qualified Name
+      * @return - return the fully qualified name of a type.
+      */
+    def fqn: String
+  }
+
+  /***
+    * InType - This is the type passed IN to a service method
+    * @param fqn - Fully Qualified Name of Type
+    * @param schema - The Avro Schema
+    */
+  case class InType(fqn: String, schema: String) extends EventType
+
+  /***
+    * OutType - This is the type passed OUT of a service function
+    * @param fqn - Fully Qualified Name of Type
+    * @param schema - The Avro Schema
+    */
+  case class OutType(fqn: String, schema: String) extends EventType
+
+  /***
+    * ServiceMethod - a mapping from In to Future[Out]
+    * @param in - InType
+    * @param out - OutType
+    */
+  case class ServiceMethod(in: InType, out: OutType) extends TypeBus
+
+  /***
+    * ServiceDescriptor - fully describe a service
+    * @param service - the name of the service
+    * @param serviceMethods - a list of all the ServiceMethod
+    */
+  case class ServiceDescriptor(
+                              service: String,
+                              serviceMethods: Seq[ServiceMethod]
+                              ) extends TypeBus
+
+  /***
+    * GetServiceDescriptor - a request to get the ServiceDescriptor
+    * @param service - the name of the service that you want
+    */
+  case class GetServiceDescriptor(service: String) extends TypeBus
+
+  /***
+    * EventMeta - details and routing information for an Event
+    * @param eventId - unique UUID of an event
+    * @param eventType - the FQN of the event type
+    * @param source - address of actor emitting the event
+    * @param correlationId - id to correlate events
+    * @param directReply - used by RPC actor and generated clients
+    * @param userId - user id to associate this event with
+    * @param socketId - web/tcp socket identifier
+    * @param responseTo - the event UUID this is response to
+    * @param extra - additional developer generated meta
+    */
+  case class EventMeta(eventId: String,
+                       eventType: String,
                        source: String,
-                       userIdentifier: Option[String],
                        correlationId: Option[String],
-                       occurredAt: DateTime,
-                       payload: T
-                     )*/
+                       directReply: Option[String] = None,
+                       userId: Option[String] = None,
+                       socketId: Option[String] = None,
+                       responseTo: Option[String] = None,
+                       extra: Map[String, String] = Map.empty
+                       /*occurredAt: DateTime*/) extends TypeBus
 
-  case class SocketEvent[T](
-                             correlationId: String,
-                             occurredAt: DateTime,
-                             payload: T
-                           ) extends m.Model
+  /***
+    * SocketEvent - event for passing data down a socket to a client.
+    * @param meta - EventMeta
+    * @param payload - Array[Byte] avro payload
+    */
+  final case class SocketEvent(
+                             meta: EventMeta,
+                             payload: Array[Byte]
+                           ) extends TypeBus
 
-  case class PublishedEvent[T](
-                                eventId: String,
-                                eventType: String,
-                                source: String,
-                                userIdentifier: Option[String],
-                                socketId: Option[String],
-                                correlationId: Option[String],
-                                occurredAt: DateTime,
-                                publishedAt: DateTime,
-                                payload: T
-                              ) extends m.Model{
+  /***
+    * PublishedEvent - wrapper for all events that go over the bus
+    * @param meta - EventMeta
+    * @param payload - Array[Byte] avro payload
+    */
+  final case class PublishedEvent(
+                             meta: EventMeta,
+                             payload: Array[Byte]
+                              ) extends TypeBus
 
-    def toReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
-      eventId = eventId,
-      eventType = payload.getClass.getCanonicalName,
-      source = this.source,
-      userIdentifier = this.userIdentifier,
-      socketId = this.socketId,
-      correlationId = this.correlationId,
-      occurredAt = this.occurredAt,
-      publishedAt = this.publishedAt,
-      payload = payload
-    )
-
-    def toBroadcastReply[U](payload: U, eventId: String = UUID.randomUUID().toString) = ResponseEvent(
-      eventId = eventId,
-      eventType = payload.getClass.getCanonicalName,
-      source = this.source,
-      userIdentifier = this.userIdentifier,
-      socketId = None,
-      correlationId = this.correlationId,
-      occurredAt = this.occurredAt,
-      publishedAt = this.publishedAt,
-      payload = payload
-    )
-
-    def toEvent[U](payload: U, eventId: String = UUID.randomUUID().toString) = PublishedEvent(
-      eventId = eventId,
-      eventType = payload.getClass.getCanonicalName,
-      source = this.source,
-      userIdentifier = this.userIdentifier,
-      socketId = this.socketId,
-      correlationId = this.correlationId,
-      occurredAt = this.occurredAt,
-      publishedAt = this.publishedAt,
-      payload = payload
-    )
-  }
-
-  case class ResponseEvent[T](
-                                eventId: String,
-                                eventType: String,
-                                source: String,
-                                userIdentifier: Option[String],
-                                socketId: Option[String],
-                                correlationId: Option[String],
-                                occurredAt: DateTime,
-                                publishedAt: DateTime,
-                                payload: T
-                              ) extends m.Model
-
-
- // trait RpcCall[T <: m.Model, U <: m.Model]{
-    //val ttag: ClassTag[U]
-    //val result = Promise[ttag.runtimeClass.asInstanceOf[Class[U]]]
-  //}
-   /*@implicitNotFound(
-     "No Rpc definition found for type ${T}. Try to implement an implicit RpcCall for this type."
-   )
-  class RpcCall[T <: m.Model, U <: m.Model](implicit val ttag: ClassTag[U]){
-    val ctype = ttag.runtimeClass.asInstanceOf[Class[U]]
-
-    def result: Promise[U] = {
-      Promise.getClass.getConstructors.head.newInstance(null, ttag).asInstanceOf[Promise[U]]
-    }//Promise[Any]().asInstanceOf[Promise[U]]
-    //val result = Promise[ctype.getClass]()
-  }
-
-  object Rpc {
-    //def toRpc[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.result
-    def test[T <: m.Model](model: T)(implicit rpc: RpcCall[T, _]) = rpc.ctype
-  }*/
 }
 
 

@@ -90,7 +90,7 @@ trait AvroByteStreams{
       output.close()
       baos.toByteArray
     }
-    
+
     /***
       * schema
       * @return - avro schema string

@@ -115,7 +115,10 @@ trait AvroJsonStream{
     val avroSchema = AvroSchema[T]
 
     override def read(json: String): T = {
+      println(s"avroSchema: ${avroSchema}")
       val input = AvroInputStream.json[T].from(json.getBytes).build(avroSchema)
+      println(s"input: ${input}")
+      println(s"input.iterator.toSeq: ${input.iterator.toSeq}")
       val result = input.iterator.toSeq
       result.head
     }

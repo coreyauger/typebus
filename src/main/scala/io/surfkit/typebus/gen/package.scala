@@ -57,6 +57,9 @@ package object gen {
     * ScalaCodeWriter - Object that does all the code gen
     */
   object ScalaCodeWriter{
+    def serviceToClassName(serviceName: String) =
+      serviceName.split("-").filterNot(_.isEmpty).map(x => x.head.toUpper + x.drop(1)).mkString
+
     /***
       * writeService - write the source code needed to generate a service with types and RPC client.
       * @param generator - ServiceGenerator definition
@@ -86,7 +89,7 @@ package object gen {
           // add the client mappings...
           sb.append("\n\n  /** Generated Actor Client */\n")
 
-          sb.append(s"  class ${generator.serviceName}Client(implicit system: ActorSystem) extends Client{\n")
+          sb.append(s"  class ${serviceToClassName(generator.serviceName)}Client(implicit system: ActorSystem) extends Client{\n")
           sb.append( "    import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           val fqlToCaseClass = classes.map(x => x.fqn -> x).toMap

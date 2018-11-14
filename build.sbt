@@ -26,6 +26,11 @@ libraryDependencies ++= Seq(
 )
 
 fork in ThisBuild := true
+
+val paradiseVersion = "2.1.1"
+
+addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
+
 /*
 
 resolvers in ThisBuild ++= Seq(

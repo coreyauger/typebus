@@ -98,3 +98,43 @@ trait AvroByteStreams{
     override def schema: String = avroSchema.toString
   }
 }
+
+
+// CA: FUTURE: we could allow for json as well..
+trait JsonStreamWriter[A] extends Schemacha{
+  def write(value: A): String
+}
+
+trait JsonStreamReader[A] extends Schemacha{
+  def read(json: String): A
+}
+
+trait AvroJsonStream{
+
+  class AvroJsonStreamReader[T : SchemaFor : Decoder] extends JsonStreamReader[T] {
+    val avroSchema = AvroSchema[T]
+
+    override def read(json: String): T = {
+      val input = AvroInputStream.json[T].from(json).build(avroSchema)
+      val result = input.iterator.toSeq
+      result.head
+    }
+
+    override def schema: String = avroSchema.toString
+  }
+
+  class AvroJsonStreamWriter[T : SchemaFor : Encoder] extends JsonStreamWriter[T]{
+    val avroSchema = AvroSchema[T]
+
+    override def write(obj: T): String = {
+      val baos = new ByteArrayOutputStream()
+      val output = AvroOutputStream.json[T].to(baos).build(avroSchema)
+      output.write(obj)
+      output.close()
+      baos.toString("UTF-8")
+    }
+
+    override def schema: String = avroSchema.toString
+  }
+}
+

@@ -92,6 +92,9 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
       meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
   }
 
+  // TODO: macro to capture the types and add it to the service definition.
+  //def publish[T <: UserBaseType : ClassTag](obj: T)(implicit reader: ByteStreamReader[T]) = {}
+
   /***
     * startService - entry point called by all servicies after all service level methods have been registered.
     * @param name - the name of this service

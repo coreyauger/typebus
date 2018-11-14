@@ -16,7 +16,7 @@ Another goal of typebus is to provide a broadcast of the available of service fu
 
 Typebus services maintain a service definition.  This definitions contain the mappings and type information and can be fetched from other services over the bus.  This allows programmers to generate RPC clients and types without writing or knowing anything other then the service name.
 
-##Typebus Design Patterns
+## Typebus Design Patterns
 
 **Transformation Pattern**
 This is the simplest and probably most widely used pattern in the system.  With this pattern we are creating a service that takes in a type T and at some point in the future will produce a type U or an Error.  When one event does not need to know about others we can simple create causal chains of events.

@@ -15,7 +15,10 @@ lazy val `typebus-kinesis` =
 val akkaV = "2.5.13"
 
 libraryDependencies ++= Seq(
-  "io.surfkit" %% "typebus" %  "0.0.5-SNAPSHOT"
+  "io.surfkit" %% "typebus" %  "0.0.5-SNAPSHOT",
+  "com.typesafe.akka"       %% "akka-cluster" % akkaV,
+  "com.typesafe.akka"       %% "akka-cluster-tools" % akkaV,
+  "com.lightbend.akka" %% "akka-stream-alpakka-kinesis" % "1.0-M1"
 )
 
 fork in ThisBuild := true

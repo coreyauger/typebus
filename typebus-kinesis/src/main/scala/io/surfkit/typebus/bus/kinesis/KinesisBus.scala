@@ -1,57 +1,71 @@
 package io.surfkit.typebus.bus.kinesis
 
+import java.nio.ByteBuffer
 import java.util.UUID
 
-import akka.Done
-import akka.actor.{ActorRef, ActorSystem}
-import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
-import akka.stream.scaladsl.Sink
+import akka.{Done, NotUsed}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.stream.alpakka.kinesis.{KinesisFlowSettings, ShardSettings}
+import akka.stream.OverflowStrategy.backpressure
+import akka.stream.alpakka.kinesis.scaladsl.{KinesisFlow, KinesisSink, KinesisSource}
+import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
-import akka.util.Timeout
+import akka.util.{ByteString, Timeout}
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
+import com.amazonaws.services.kinesis.model.{PutRecordsRequestEntry, PutRecordsResultEntry, Record, ShardIteratorType}
 import com.typesafe.config.ConfigFactory
-import io.surfkit.typebus.actors.ProducerActor
+import io.surfkit.typebus.AvroByteStreams
+import io.surfkit.typebus.actors.{ProducerActor, TypeBusActor}
 import io.surfkit.typebus.bus.Bus
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
 
-trait KinesisBus[UserBaseType] extends Bus[UserBaseType]{
+trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams with Actor {
   service: Service[UserBaseType] =>
 
+  import collection.JavaConverters._
   val cfg = ConfigFactory.load
-  val kafka = cfg.getString("bus.kafka")
-  import collection.JavaConversions._
-  val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
-    "bootstrap.servers" -> kafka,
-    "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
-    "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
-  ))
+  // TODO: get kinesis config
+  //val kafka = cfg.getString("bus.kafka")
+  val kinesisStream = cfg.getString("bus.kinesis.stream")
+  val shards = cfg.getStringList("bus.kinesis.shards").asScala
+  val kinesisPartitionKey = cfg( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
 
+  // Create a Kinesis endpoint pointed at our local kinesalite
+  val endpoint = new EndpointConfiguration("http://localhost:4567", "us-west-2")
+  implicit val amazonKinesisAsync: AmazonKinesisAsync = AmazonKinesisAsyncClientBuilder.standard().withEndpointConfiguration(endpoint).build()
+
+  val tyebusMap = scala.collection.mutable.Map.empty[String, ActorRef]
+
+  val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
   val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
-  def publish(event: PublishedEvent): Unit = {
-    try {
-      println(s"publish ${event.meta.eventType}")
-      producer.send(
-        new ProducerRecord[Array[Byte], Array[Byte]](
-          event.meta.eventType,
-          publishedEventWriter.write(event)
-        )
-      )
-    }catch{
-      case e:Exception =>
-        println("Error trying to publish event.")
-        e.printStackTrace()
-    }
-  }
+
+  //#flow-settings
+  val flowSettings = KinesisFlowSettings(
+    parallelism = 1,
+    maxBatchSize = 500,
+    maxRecordsPerSecond = 1000,
+    maxBytesPerSecond = 1000000,
+    maxRetries = 5,
+    backoffStrategy = KinesisFlowSettings.Exponential,
+    retryInitialTimeout = 100.millis
+  )
+
+  val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, backpressure)
+    .map(event => publishedEventWriter.write(event))
+    .map(data => new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey))
+    .to(KinesisSink(kinesisStream, flowSettings))
+    .run()
+
+  def publish(event: PublishedEvent): Unit =
+    publishActor ! event
 
   def busActor(implicit system: ActorSystem): ActorRef =
-    system.actorOf(ProducerActor.props(producer))
+    system.actorOf(Props(new ProducerActor(this)))
 
   def startTypeBus(serviceName: String)(implicit system: ActorSystem): Unit = {
     import system.dispatcher
@@ -60,14 +74,15 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType]{
     }
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
+    implicit val amazonKinesisAsync: com.amazonaws.services.kinesis.AmazonKinesisAsync =
+      AmazonKinesisAsyncClientBuilder.defaultClient()
+
+    system.registerOnTermination(amazonKinesisAsync.shutdown())
+
+
     val serviceDescription = makeServiceDescriptor(serviceName)
     implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
     implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
-
-    val consumerSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-      .withBootstrapServers(kafka)
-      .withGroupId(serviceName)
-      .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
     /***
       * getServiceDescriptor - default hander to broadcast ServiceDescriptions
@@ -82,62 +97,68 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType]{
     }
     registerServiceStream(getServiceDescriptor _)
 
+    tyebusMap ++= (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)).map(x => x -> context.actorOf(TypeBusActor.props(x, context.self)) ).toMap
 
-    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
-      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
-        println("******** TypeBus: replyAndCommit")
-        system.log.debug(s"listOfImplicitsWriters: ${listOfImplicitsWriters}")
-        system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
-        if(x._3 != Unit) {
-          implicit val timeout = Timeout(4 seconds)
-          val retType = x._3.getClass.getCanonicalName
-          val publishedEvent = PublishedEvent(
-            meta = x._2.meta.copy(
-              eventId = UUID.randomUUID.toString,
-              eventType = x._3.getClass.getCanonicalName,
-              responseTo = Some(x._2.meta.eventId)
-            ),
-            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
-              writer.write(x._3.asInstanceOf[TypeBus])
-            }.getOrElse(listOfImplicitsWriters(retType).write(x._3.asInstanceOf[UserBaseType]))
-          )
-          x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
-          publish(publishedEvent)
-        }
-        println("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        x._1.committableOffset.commitScaladsl()
-      }
-      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
-    }
+    // source-list
+    val mergeSettings = shards.map { shardId =>
+      ShardSettings(kinesisStream,
+        shardId,
+        ShardIteratorType.AT_TIMESTAMP,
+        atTimestamp = Some(new java.util.Date()),
+        refreshInterval = 1.second,
+        limit = 500)
+    }.toList
 
-    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfFunctions.map(_._1)}")
+    val mergedSource: Source[Record, NotUsed] = KinesisSource.basicMerge(mergeSettings, amazonKinesisAsync)
 
-    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)) :_*))
-      .mapAsyncUnordered(4) { msg =>
-        system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
+    mergedSource.map { msg =>
+      val event = publishedEventReader.read(msg.getData.array())
+      if(!tyebusMap.contains(event.meta.eventType) )
+        tyebusMap += event.meta.eventType -> context.actorOf(TypeBusActor.props(event.meta.eventType, context.self))
+      tyebusMap(event.meta.eventType) ! event
+      event
+    }.runWith(Sink.ignore)
+
+
+    def receive: Receive = {
+      case event: PublishedEvent =>
+        system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
         try {
-          val reader = listOfServiceImplicitsReaders.get(msg.record.topic()).getOrElse(listOfImplicitsReaders(msg.record.topic()))
-          val publish = publishedEventReader.read(msg.record.value())
+          val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
+          val publish = publishedEventReader.read(event.payload)
           system.log.debug(s"TypeBus: got publish: ${publish}")
           system.log.debug(s"TypeBus: reader: ${reader}")
           system.log.debug(s"publish.payload.size: ${publish.payload.size}")
           val payload = reader.read(publish.payload)
           system.log.debug(s"TypeBus: got payload: ${payload}")
-          if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMetaUnit( (payload, publish.meta) ).map(x => (msg, publish, x))
+          (if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
+            handleEventWithMetaUnit( (payload, publish.meta) )
           else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
+            handleEventWithMeta( (payload, publish.meta)  )
           else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleServiceEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
+            handleServiceEventWithMeta( (payload, publish.meta) )
           else
-            handleEvent(payload).map(x => (msg, publish, x))
+            handleEvent(payload)) map{ ret =>
+            implicit val timeout = Timeout(4 seconds)
+            val retType = ret.getClass.getCanonicalName
+            val publishedEvent = PublishedEvent(
+              meta = event.meta.copy(
+                eventId = UUID.randomUUID.toString,
+                eventType = ret.getClass.getCanonicalName,
+                responseTo = Some(event.meta.eventId)
+              ),
+              payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
+                writer.write(ret.asInstanceOf[TypeBus])
+              }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
+            )
+            event.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+            publish(publishedEvent)
+          }
         }catch{
           case t:Throwable =>
             t.printStackTrace()
             throw t
         }
-      }
-      .mapAsyncUnordered(4)(replyAndCommit)
-      .runWith(Sink.ignore)
+    }
   }
 }

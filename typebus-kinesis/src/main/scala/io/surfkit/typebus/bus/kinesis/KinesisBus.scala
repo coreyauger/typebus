@@ -41,7 +41,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   }
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
 
-
   // Create a Kinesis endpoint pointed at our local kinesalite
   val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
   implicit val amazonKinesisAsync: AmazonKinesisAsync = AmazonKinesisAsyncClientBuilder.standard().withEndpointConfiguration(endpoint).build()
@@ -120,11 +119,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
       tyebusMap(event.meta.eventType) ! event
       event
     }.runWith(Sink.ignore)
-
-
-    def handlePublishEvent(event: PublishedEvent ) = {
-
-    }
   }
 
   def receive: Receive = {

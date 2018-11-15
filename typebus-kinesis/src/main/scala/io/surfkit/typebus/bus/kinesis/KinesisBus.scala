@@ -1,6 +1,7 @@
 package io.surfkit.typebus.bus.kinesis
 
 import java.nio.ByteBuffer
+import java.security.cert.X509Certificate
 import java.util.UUID
 
 import akka.{Done, NotUsed}
@@ -11,6 +12,7 @@ import akka.stream.alpakka.kinesis.scaladsl.{KinesisFlow, KinesisSink, KinesisSo
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
 import akka.util.Timeout
+import com.amazonaws.ClientConfiguration
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
@@ -21,6 +23,8 @@ import io.surfkit.typebus.actors.{ProducerActor, TypeBusActor}
 import io.surfkit.typebus.bus.Bus
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
+import javax.net.ssl.{KeyManager, SSLContext, X509TrustManager}
+import org.apache.http.conn.ssl.{NoopHostnameVerifier, SSLConnectionSocketFactory}
 
 import scala.concurrent.duration._
 import scala.concurrent.Future
@@ -46,6 +50,8 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
   implicit val amazonKinesisAsync: AmazonKinesisAsync =
     AmazonKinesisAsyncClientBuilder.standard()
+      // CA - WARNING we only want to ignore SSL validation on localhost
+      .withClientConfiguration(ignoringInvalidSslCertificates(new ClientConfiguration()))
       .withEndpointConfiguration(endpoint)
       .build()
   context.system.registerOnTermination(amazonKinesisAsync.shutdown())
@@ -158,5 +164,32 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
           t.printStackTrace()
           throw t
       }
+  }
+
+
+
+
+
+  // CA - code based off: https://www.programcreek.com/java-api-examples/?code=adobe/S3Mock/S3Mock-master/src/test/java/com/adobe/testing/s3mock/its/AmazonClientUploadIT.java
+  private def ignoringInvalidSslCertificates(clientConfiguration: ClientConfiguration) = {
+    clientConfiguration.getApacheHttpClientConfig()
+      .withSslSocketFactory(new SSLConnectionSocketFactory(
+        createBlindlyTrustingSSLContext(),
+        NoopHostnameVerifier.INSTANCE))
+    clientConfiguration
+  }
+
+
+  private def createBlindlyTrustingSSLContext(): SSLContext = {
+    object WideOpenX509TrustManager extends X509TrustManager {
+      override def checkClientTrusted(chain: Array[X509Certificate], authType: String) = ()
+      override def checkServerTrusted(chain: Array[X509Certificate], authType: String) = ()
+      override def getAcceptedIssuers = Array[X509Certificate]()
+    }
+
+    val context = SSLContext.getInstance("TLS")
+    context.init(Array[KeyManager](), Array(WideOpenX509TrustManager), null)
+    context
+
   }
 }

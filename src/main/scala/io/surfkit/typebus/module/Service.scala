@@ -95,123 +95,13 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
   // TODO: macro to capture the types and add it to the service definition.
   //def publish[T <: UserBaseType : ClassTag](obj: T)(implicit reader: ByteStreamReader[T]) = {}
 
-  /***
-    * startService - entry point called by all servicies after all service level methods have been registered.
-    * @param name - the name of this service
-    * @param consumerSettings - The kafak consumer settings
-    * @param replyTo - A way to thread the responses to something other the the bus (Normally this is the bus actor)
-    * @param system - The akka actor system
-    */
-  def startService(name: String, consumerSettings: ConsumerSettings[Array[Byte], Array[Byte]], replyTo: ActorRef)(implicit system: ActorSystem) = {
-    println(s"START SERVICE: ${name} with replyTo: ${replyTo}  +++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-
-    import system.dispatcher
-    val decider: Supervision.Decider = {
-      case _ => Supervision.Resume  // Never give up !
+  def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(
+    service = serviceName,
+    serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit").map{
+      case (in, out) =>
+        val reader = listOfImplicitsReaders(in)
+        val writer = listOfImplicitsWriters(out)
+        ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
     }
-
-    implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
-
-    val serviceDescription = ServiceDescriptor(
-      service = name,
-      serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit")map{
-        case (in, out) =>
-          val reader = listOfImplicitsReaders(in)
-          val writer = listOfImplicitsWriters(out)
-          ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
-      }
-    )
-    implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
-    implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
-
-    /***
-      * getServiceDescriptor - default hander to broadcast ServiceDescriptions
-      * @param x - GetServiceDescriptor is another service requesting a ServiceDescriptions
-      * @param meta - EventMeta routing info
-      * @return - Future[ServiceDescriptor]
-      */
-    def getServiceDescriptor(x: GetServiceDescriptor, meta: EventMeta): Future[ServiceDescriptor] = {
-      println("**************** getServiceDescriptor")
-      println(serviceDescription)
-      Future.successful(serviceDescription)
-    }
-    registerServiceStream(getServiceDescriptor _)
-
-
-    val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
-      def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
-        println("******** TypeBus: replyAndCommit")
-        system.log.debug(s"listOfImplicitsWriters: ${listOfImplicitsWriters}")
-        system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
-        if(x._3 != Unit) {
-          implicit val timeout = Timeout(4 seconds)
-          val retType = x._3.getClass.getCanonicalName
-          val publishedEvent = PublishedEvent(
-            meta = x._2.meta.copy(
-              eventId = UUID.randomUUID.toString,
-              eventType = x._3.getClass.getCanonicalName,
-              responseTo = Some(x._2.meta.eventId)
-            ),
-            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
-              writer.write(x._3.asInstanceOf[TypeBus])
-            }.getOrElse(listOfImplicitsWriters(retType).write(x._3.asInstanceOf[UserBaseType]))
-          )
-          x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
-          replyTo ! publishedEvent
-        }
-        println("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        x._1.committableOffset.commitScaladsl()
-      }
-      def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
-    }
-
-    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfFunctions.map(_._1)}")
-
-    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)) :_*))
-      .mapAsyncUnordered(4) { msg =>
-        system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
-        try {
-          val schema = AvroSchema[PublishedEvent]
-          val reader = listOfServiceImplicitsReaders.get(msg.record.topic()).getOrElse(listOfImplicitsReaders(msg.record.topic()))
-          val publish = publishedEventReader.read(msg.record.value())
-          system.log.debug(s"TypeBus: got publish: ${publish}")
-          system.log.debug(s"TypeBus: reader: ${reader}")
-          system.log.debug(s"publish.payload.size: ${publish.payload.size}")
-          val payload = reader.read(publish.payload)
-          system.log.debug(s"TypeBus: got payload: ${payload}")
-          if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMetaUnit( (payload, publish.meta) ).map(x => (msg, publish, x))
-          else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
-          else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleServiceEventWithMeta( (payload, publish.meta)  ).map(x => (msg, publish, x))
-          else
-            handleEvent(payload).map(x => (msg, publish, x))
-        }catch{
-          case t:Throwable =>
-            t.printStackTrace()
-            throw t
-        }
-      }
-      .mapAsyncUnordered(4)(replyAndCommit)
-      .runWith(Sink.ignore)
-
-
-    // broadcast our service description on startup...
-    if(replyTo != ActorRef.noSender) {
-      println("BROADCAST: ServiceDescriptor ****************************************************************************")
-      println(s"replyTo: ${replyTo}")
-      println(s"serviceDescription: ${serviceDescription}")
-      replyTo ! PublishedEvent(
-        meta = EventMeta(
-          eventId = UUID.randomUUID().toString,
-          eventType = serviceDescription.getClass.getCanonicalName,
-          source = "",
-          correlationId = None),
-        payload = serviceDescriptorWriter.write(serviceDescription))
-      // TODO: what about using the actor to pass this back to
-      // ie define an actor to grab this
-      // or try passing in the bus actor?
-    }
-  }
+  )
 }

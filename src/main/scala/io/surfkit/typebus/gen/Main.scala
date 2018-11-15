@@ -1,19 +1,12 @@
 package io.surfkit.typebus.gen
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
-import akka.kafka.ConsumerSettings
 import avrohugger.Generator
-import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
-import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import avrohugger.format.Standard
 import avrohugger.types.ScalaCaseObjectEnum
-import io.surfkit.typebus.actors.ProducerActor
-import org.apache.kafka.clients.producer.KafkaProducer
+import io.surfkit.typebus.bus.KafkaBus
 
 import concurrent.Future
 
@@ -21,7 +14,7 @@ import concurrent.Future
   * App to generate source code for a service.
   * This is just a Typebus Service[TypeBus]
   */
-object Main extends App with Service[TypeBus] {
+object Main extends App with Service[TypeBus] with KafkaBus[TypeBus] {
   println("Typebus Generator with args: " + (args mkString ", "))
 
   /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
@@ -34,24 +27,7 @@ object Main extends App with Service[TypeBus] {
     }
   }*/
 
-  // TODO: need to abstract away the bus layer more then this..
-  val cfg = ConfigFactory.load
-
-  val kafka = cfg.getString("bus.kafka")
-  implicit val system = ActorSystem("squbs")  // TODO: get this from where?
-
-  val consumerSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-    .withBootstrapServers(kafka)
-    .withGroupId("tally")
-    .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
-  import collection.JavaConversions._
-  val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
-    "bootstrap.servers" -> kafka,
-    "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
-    "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
-  ))
-  val bus = system.actorOf(ProducerActor.props(producer))
-
+  implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
 
   /***
@@ -106,21 +82,14 @@ object Main extends App with Service[TypeBus] {
 
 
   registerStream(genServiceDescription _)
-  startService("",consumerSettings, akka.actor.ActorRef.noSender)
+  startTypeBus("")
 
   val getServiceDescriptor = GetServiceDescriptor("twitter")
-  val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
+  implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
 
   println(s"*** Calling getServiceDescriptor: ${getServiceDescriptor}")
-  bus ! PublishedEvent(
-    meta = EventMeta(
-      eventId = UUID.randomUUID().toString,
-      eventType = getServiceDescriptor.getClass.getCanonicalName,
-      source = "",
-      correlationId = None
-    ),
-    payload = getServiceDescriptorWriter.write(getServiceDescriptor)
-  )
+  publish(getServiceDescriptor)
+
 
   //val squbs = "org.squbs.unicomplex.Bootstrap"  // TODO: this is arg(0)
   //val thread = new ServiceThread(squbs, args)

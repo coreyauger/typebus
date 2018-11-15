@@ -10,10 +10,10 @@ import akka.stream.OverflowStrategy.backpressure
 import akka.stream.alpakka.kinesis.scaladsl.{KinesisFlow, KinesisSink, KinesisSource}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
-import akka.util.{ByteString, Timeout}
+import akka.util.Timeout
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
-import com.amazonaws.services.kinesis.model.{PutRecordsRequestEntry, PutRecordsResultEntry, Record, ShardIteratorType}
+import com.amazonaws.services.kinesis.model.{PutRecordsRequestEntry, Record, ShardIteratorType}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.AvroByteStreams
 import io.surfkit.typebus.actors.{ProducerActor, TypeBusActor}
@@ -28,20 +28,26 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   service: Service[UserBaseType] =>
 
   import collection.JavaConverters._
+  import context.dispatcher
   val cfg = ConfigFactory.load
-  // TODO: get kinesis config
-  //val kafka = cfg.getString("bus.kafka")
   val kinesisStream = cfg.getString("bus.kinesis.stream")
+  val kinesisEndpoint = cfg.getString("bus.kinesis.endpoint")
+  val kinesisRegion = cfg.getString("bus.kinesis.region")
   val shards = cfg.getStringList("bus.kinesis.shards").asScala
-  val kinesisPartitionKey = cfg( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
+  val kinesisPartitionKey = shards( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
+
+  val decider: Supervision.Decider = {
+    case _ => Supervision.Resume  // Never give up !
+  }
+  implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+
 
   // Create a Kinesis endpoint pointed at our local kinesalite
-  val endpoint = new EndpointConfiguration("http://localhost:4567", "us-west-2")
+  val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
   implicit val amazonKinesisAsync: AmazonKinesisAsync = AmazonKinesisAsyncClientBuilder.standard().withEndpointConfiguration(endpoint).build()
 
   val tyebusMap = scala.collection.mutable.Map.empty[String, ActorRef]
 
-  val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
   val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
 
   //#flow-settings
@@ -69,10 +75,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
 
   def startTypeBus(serviceName: String)(implicit system: ActorSystem): Unit = {
     import system.dispatcher
-    val decider: Supervision.Decider = {
-      case _ => Supervision.Resume  // Never give up !
-    }
-    implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
     implicit val amazonKinesisAsync: com.amazonaws.services.kinesis.AmazonKinesisAsync =
       AmazonKinesisAsyncClientBuilder.defaultClient()
@@ -120,45 +122,49 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     }.runWith(Sink.ignore)
 
 
-    def receive: Receive = {
-      case event: PublishedEvent =>
-        system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
-        try {
-          val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
-          val publish = publishedEventReader.read(event.payload)
-          system.log.debug(s"TypeBus: got publish: ${publish}")
-          system.log.debug(s"TypeBus: reader: ${reader}")
-          system.log.debug(s"publish.payload.size: ${publish.payload.size}")
-          val payload = reader.read(publish.payload)
-          system.log.debug(s"TypeBus: got payload: ${payload}")
-          (if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMetaUnit( (payload, publish.meta) )
-          else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleEventWithMeta( (payload, publish.meta)  )
-          else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-            handleServiceEventWithMeta( (payload, publish.meta) )
-          else
-            handleEvent(payload)) map{ ret =>
-            implicit val timeout = Timeout(4 seconds)
-            val retType = ret.getClass.getCanonicalName
-            val publishedEvent = PublishedEvent(
-              meta = event.meta.copy(
-                eventId = UUID.randomUUID.toString,
-                eventType = ret.getClass.getCanonicalName,
-                responseTo = Some(event.meta.eventId)
-              ),
-              payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
-                writer.write(ret.asInstanceOf[TypeBus])
-              }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
-            )
-            event.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
-            publish(publishedEvent)
-          }
-        }catch{
-          case t:Throwable =>
-            t.printStackTrace()
-            throw t
-        }
+    def handlePublishEvent(event: PublishedEvent ) = {
+
     }
+  }
+
+  def receive: Receive = {
+    case event: PublishedEvent =>
+      context.system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
+      try {
+        val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
+        val publishedEvent: PublishedEvent = publishedEventReader.read(event.payload)
+        context.system.log.debug(s"TypeBus: got publish: ${publishedEvent}")
+        context.system.log.debug(s"TypeBus: reader: ${reader}")
+        context.system.log.debug(s"publish.payload.size: ${publishedEvent.payload.size}")
+        val payload = reader.read(publishedEvent.payload)
+        context.system.log.debug(s"TypeBus: got payload: ${payload}")
+        (if(handleEventWithMetaUnit.isDefinedAt( (payload, publishedEvent.meta) ) )
+          handleEventWithMetaUnit( (payload, publishedEvent.meta) )
+        else if(handleEventWithMeta.isDefinedAt( (payload, publishedEvent.meta) ) )
+          handleEventWithMeta( (payload, publishedEvent.meta)  )
+        else if(handleServiceEventWithMeta.isDefinedAt( (payload, publishedEvent.meta) ) )
+          handleServiceEventWithMeta( (payload, publishedEvent.meta) )
+        else
+          handleEvent(payload)) map{ ret =>
+          implicit val timeout = Timeout(4 seconds)
+          val retType = ret.getClass.getCanonicalName
+          val publishedEvent = PublishedEvent(
+            meta = event.meta.copy(
+              eventId = UUID.randomUUID.toString,
+              eventType = ret.getClass.getCanonicalName,
+              responseTo = Some(event.meta.eventId)
+            ),
+            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
+              writer.write(ret.asInstanceOf[TypeBus])
+            }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
+          )
+          event.meta.directReply.foreach( context.system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+          publish(publishedEvent)
+        }
+      }catch{
+        case t:Throwable =>
+          t.printStackTrace()
+          throw t
+      }
   }
 }

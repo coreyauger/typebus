@@ -1,12 +1,21 @@
 package io.surfkit.typebus.client
 
-import akka.actor.{ActorSystem, Props}
+import java.nio.ByteBuffer
+
+import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.stream.OverflowStrategy.backpressure
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
+import akka.stream.alpakka.kinesis.KinesisFlowSettings
+import akka.stream.alpakka.kinesis.scaladsl.KinesisSink
+import akka.stream.scaladsl.Source
+import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+import com.amazonaws.services.kinesis.model.PutRecordsRequestEntry
+import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.actors.GatherActor
 import io.surfkit.typebus.bus.Publisher
 import io.surfkit.typebus.event.PublishedEvent
-import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -18,29 +27,53 @@ import scala.reflect.ClassTag
   */
 class KinesisClient(implicit system: ActorSystem) extends Client with Publisher with AvroByteStreams{
   import akka.pattern.ask
-  import collection.JavaConversions._
   import akka.util.Timeout
   import system.dispatcher
 
-  val kafka = ConfigFactory.load.getString("bus.kafka")
 
-  val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
-    "bootstrap.servers" -> kafka,
-    "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
-    "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
-  ))
+  import collection.JavaConverters._
+  val cfg = ConfigFactory.load
+  val kinesisStream = cfg.getString("bus.kinesis.stream")
+  val kinesisEndpoint = cfg.getString("bus.kinesis.endpoint")
+  val kinesisRegion = cfg.getString("bus.kinesis.region")
+  val shards = cfg.getStringList("bus.kinesis.shards").asScala
+  val kinesisPartitionKey = shards( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
 
+  val decider: Supervision.Decider = {
+    case _ => Supervision.Resume  // Never give up !
+  }
+  implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
+
+  // Create a Kinesis endpoint pointed at our local kinesalite
+  val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
+  implicit val amazonKinesisAsync: AmazonKinesisAsync = AmazonKinesisAsyncClientBuilder.standard().withEndpointConfiguration(endpoint).build()
+
+  val tyebusMap = scala.collection.mutable.Map.empty[String, ActorRef]
+
+  val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
   val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
+
+  //#flow-settings
+  val flowSettings = KinesisFlowSettings(
+    parallelism = 1,
+    maxBatchSize = 500,
+    maxRecordsPerSecond = 1000,
+    maxBytesPerSecond = 1000000,
+    maxRetries = 5,
+    backoffStrategy = KinesisFlowSettings.Exponential,
+    retryInitialTimeout = 100.millis
+  )
+
+  val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, backpressure)
+    .map(event => publishedEventWriter.write(event))
+    .map(data => new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey))
+    .to(KinesisSink(kinesisStream, flowSettings))
+    .run()
 
   def publish(event: PublishedEvent): Unit =
     try {
       system.log.info(s"[KafkaClient] publish ${event.meta.eventType}")
-      producer.send(
-        new ProducerRecord[Array[Byte], Array[Byte]](
-          event.meta.eventType,
-          publishedEventWriter.write(event)
-        )
-      )
+      publishActor ! event
     }catch{
       case e:Exception =>
         system.log.error(e, "Error trying to publish event.")

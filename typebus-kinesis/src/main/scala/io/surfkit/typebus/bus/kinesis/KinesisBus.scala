@@ -6,11 +6,12 @@ import java.util.UUID
 import akka.{Done, NotUsed}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.stream.alpakka.kinesis.{KinesisFlowSettings, ShardSettings}
-import akka.stream.OverflowStrategy.backpressure
+import akka.stream.OverflowStrategy.fail
 import akka.stream.alpakka.kinesis.scaladsl.{KinesisFlow, KinesisSink, KinesisSource}
 import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
 import akka.util.Timeout
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
 import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
 import com.amazonaws.services.kinesis.model.{PutRecordsRequestEntry, Record, ShardIteratorType}
@@ -34,7 +35,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   val kinesisEndpoint = cfg.getString("bus.kinesis.endpoint")
   val kinesisRegion = cfg.getString("bus.kinesis.region")
   val shards = cfg.getStringList("bus.kinesis.shards").asScala
-  val kinesisPartitionKey = shards( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
+  val kinesisPartitionKey = "typebus" //shards( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
 
   val decider: Supervision.Decider = {
     case _ => Supervision.Resume  // Never give up !
@@ -43,7 +44,11 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
 
   // Create a Kinesis endpoint pointed at our local kinesalite
   val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
-  implicit val amazonKinesisAsync: AmazonKinesisAsync = AmazonKinesisAsyncClientBuilder.standard().withEndpointConfiguration(endpoint).build()
+  implicit val amazonKinesisAsync: AmazonKinesisAsync =
+    AmazonKinesisAsyncClientBuilder.standard()
+      .withEndpointConfiguration(endpoint)
+      .build()
+  context.system.registerOnTermination(amazonKinesisAsync.shutdown())
 
   val tyebusMap = scala.collection.mutable.Map.empty[String, ActorRef]
 
@@ -60,7 +65,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     retryInitialTimeout = 100.millis
   )
 
-  val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, backpressure)
+  val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, fail)
     .map(event => publishedEventWriter.write(event))
     .map(data => new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey))
     .to(KinesisSink(kinesisStream, flowSettings))
@@ -74,12 +79,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
 
   def startTypeBus(serviceName: String)(implicit system: ActorSystem): Unit = {
     import system.dispatcher
-
-    implicit val amazonKinesisAsync: com.amazonaws.services.kinesis.AmazonKinesisAsync =
-      AmazonKinesisAsyncClientBuilder.defaultClient()
-
-    system.registerOnTermination(amazonKinesisAsync.shutdown())
-
 
     val serviceDescription = makeServiceDescriptor(serviceName)
     implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
@@ -104,8 +103,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     val mergeSettings = shards.map { shardId =>
       ShardSettings(kinesisStream,
         shardId,
-        ShardIteratorType.AT_TIMESTAMP,
-        atTimestamp = Some(new java.util.Date()),
+        ShardIteratorType.LATEST,
         refreshInterval = 1.second,
         limit = 500)
     }.toList

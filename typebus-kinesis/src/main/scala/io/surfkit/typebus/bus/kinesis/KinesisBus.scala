@@ -72,10 +72,10 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   )
 
   val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, fail)
-    .map(event => publishedEventWriter.write(event))
-    .map{data =>
+    .map(event => (publishedEventWriter.write(event),event.meta) )
+    .map{ case (data, meta) =>
       println(s"kinesis publish actor got data: ${data}")
-      new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey)
+      new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(meta.eventType)
     }
     .to(KinesisSink(kinesisStream, flowSettings))
     .run()

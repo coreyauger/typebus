@@ -1,35 +1,21 @@
 package io.surfkit.typebus.gen
 
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, Props}
 import avrohugger.Generator
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
 import avrohugger.format.Standard
 import avrohugger.types.ScalaCaseObjectEnum
 import io.surfkit.typebus.bus.kinesis.KinesisBus
+import scala.concurrent.duration._
 
 import concurrent.Future
 
-/***
-  * App to generate source code for a service.
-  * This is just a Typebus Service[TypeBus]
-  */
-object Main extends App with Service[TypeBus] with KinesisBus[TypeBus] {
-  println("Typebus Generator with args: " + (args mkString ", "))
 
-  /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
-    override def run() {
-      println(s"squbs: ${squbs}")
-      println(s"Class: ${Class.forName(squbs)}")
-      val methods = Class.forName(squbs).getMethods
-      val main = methods.filter(_.getName == "main").head
-      main.invoke(null, args.drop(1))
-    }
-  }*/
-
-  implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+class KinesisGenActor extends Service[TypeBus] with KinesisBus[TypeBus] {
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
-
+  implicit val system = context.system
+  import context.dispatcher
   /***
     * genServiceDescription - this is in fact just a service function that responds to a broadcast for ServiceDefinitons
     * @param serviceDescriptor - The ServiceDescriptor received back from broadcast
@@ -87,9 +73,32 @@ object Main extends App with Service[TypeBus] with KinesisBus[TypeBus] {
   val getServiceDescriptor = GetServiceDescriptor("twitter")
   implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
 
-  println(s"*** Calling getServiceDescriptor: ${getServiceDescriptor}")
-  publish(getServiceDescriptor)
+  println("Waiting 2 sec to call getServiceDescriptor")
+  context.system.scheduler.scheduleOnce(2 seconds) {
+    println(s"*** Calling getServiceDescriptor: ${getServiceDescriptor}")
+    publish(getServiceDescriptor)
+  }
+}
 
+/***
+  * App to generate source code for a service.
+  * This is just a Typebus Service[TypeBus]
+  */
+object Main extends App {
+  println("Typebus Generator with args: " + (args mkString ", "))
+
+  /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
+    override def run() {
+      println(s"squbs: ${squbs}")
+      println(s"Class: ${Class.forName(squbs)}")
+      val methods = Class.forName(squbs).getMethods
+      val main = methods.filter(_.getName == "main").head
+      main.invoke(null, args.drop(1))
+    }
+  }*/
+
+  implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+  system.actorOf(Props(new KinesisGenActor))
 
   //val squbs = "org.squbs.unicomplex.Bootstrap"  // TODO: this is arg(0)
   //val thread = new ServiceThread(squbs, args)

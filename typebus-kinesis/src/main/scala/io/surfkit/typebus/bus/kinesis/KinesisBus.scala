@@ -73,12 +73,17 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
 
   val publishActor = Source.actorRef[PublishedEvent](Int.MaxValue, fail)
     .map(event => publishedEventWriter.write(event))
-    .map(data => new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey))
+    .map{data =>
+      println(s"kinesis publish actor got data: ${data}")
+      new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(kinesisPartitionKey)
+    }
     .to(KinesisSink(kinesisStream, flowSettings))
     .run()
 
-  def publish(event: PublishedEvent): Unit =
+  def publish(event: PublishedEvent): Unit = {
+    println("sending event to kinesis publish actor")
     publishActor ! event
+  }
 
   def busActor(implicit system: ActorSystem): ActorRef =
     system.actorOf(Props(new ProducerActor(this)))
@@ -104,6 +109,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     registerServiceStream(getServiceDescriptor _)
 
     tyebusMap ++= (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)).map(x => x -> context.actorOf(TypeBusActor.props(x, context.self)) ).toMap
+    context.system.log.info(s"tyebusMap: ${tyebusMap}")
 
     // source-list
     val mergeSettings = shards.map { shardId =>
@@ -117,6 +123,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     val mergedSource: Source[Record, NotUsed] = KinesisSource.basicMerge(mergeSettings, amazonKinesisAsync)
 
     mergedSource.map { msg =>
+      println(s"GOT mergedSource: ${msg}")
       val event = publishedEventReader.read(msg.getData.array())
       if(!tyebusMap.contains(event.meta.eventType) )
         tyebusMap += event.meta.eventType -> context.actorOf(TypeBusActor.props(event.meta.eventType, context.self))
@@ -130,18 +137,17 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
       context.system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
       try {
         val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
-        val publishedEvent: PublishedEvent = publishedEventReader.read(event.payload)
-        context.system.log.debug(s"TypeBus: got publish: ${publishedEvent}")
+        context.system.log.debug(s"TypeBus: got publish: ${event}")
         context.system.log.debug(s"TypeBus: reader: ${reader}")
-        context.system.log.debug(s"publish.payload.size: ${publishedEvent.payload.size}")
-        val payload = reader.read(publishedEvent.payload)
+        context.system.log.debug(s"publish.payload.size: ${event.payload.size}")
+        val payload = reader.read(event.payload)
         context.system.log.debug(s"TypeBus: got payload: ${payload}")
-        (if(handleEventWithMetaUnit.isDefinedAt( (payload, publishedEvent.meta) ) )
-          handleEventWithMetaUnit( (payload, publishedEvent.meta) )
-        else if(handleEventWithMeta.isDefinedAt( (payload, publishedEvent.meta) ) )
-          handleEventWithMeta( (payload, publishedEvent.meta)  )
-        else if(handleServiceEventWithMeta.isDefinedAt( (payload, publishedEvent.meta) ) )
-          handleServiceEventWithMeta( (payload, publishedEvent.meta) )
+        (if(handleEventWithMetaUnit.isDefinedAt( (payload, event.meta) ) )
+          handleEventWithMetaUnit( (payload, event.meta) )
+        else if(handleEventWithMeta.isDefinedAt( (payload, event.meta) ) )
+          handleEventWithMeta( (payload, event.meta)  )
+        else if(handleServiceEventWithMeta.isDefinedAt( (payload, event.meta) ) )
+          handleServiceEventWithMeta( (payload, event.meta) )
         else
           handleEvent(payload)) map{ ret =>
           implicit val timeout = Timeout(4 seconds)

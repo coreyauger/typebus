@@ -13,8 +13,10 @@ import akka.stream.scaladsl.{Flow, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision}
 import akka.util.Timeout
 import com.amazonaws.ClientConfiguration
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
+import com.amazonaws.auth.{AWSCredentialsProviderChain, DefaultAWSCredentialsProviderChain}
+import com.amazonaws.client.builder.AwsClientBuilder
 import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration
+import com.amazonaws.services.kinesis.clientlibrary.lib.worker.{InitialPositionInStream, KinesisClientLibConfiguration}
 import com.amazonaws.services.kinesis.{AmazonKinesisAsync, AmazonKinesisAsyncClientBuilder}
 import com.amazonaws.services.kinesis.model.{PutRecordsRequestEntry, Record, ShardIteratorType}
 import com.typesafe.config.ConfigFactory
@@ -39,12 +41,12 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
   val kinesisEndpoint = cfg.getString("bus.kinesis.endpoint")
   val kinesisRegion = cfg.getString("bus.kinesis.region")
   val shards = cfg.getStringList("bus.kinesis.shards").asScala
-  val kinesisPartitionKey = "typebus" //shards( Math.floor(Math.random() * shards.size).toInt )    // pick a random shard to publish?
 
   val decider: Supervision.Decider = {
     case _ => Supervision.Resume  // Never give up !
   }
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+
 
   // Create a Kinesis endpoint pointed at our local kinesalite
   val endpoint = new EndpointConfiguration(kinesisEndpoint, kinesisRegion)
@@ -75,7 +77,7 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     .map(event => (publishedEventWriter.write(event),event.meta) )
     .map{ case (data, meta) =>
       println(s"kinesis publish actor got data with size: ${data.size} to withPartitionKey: ${meta.eventType} ")
-      new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey(meta.eventType)
+      new PutRecordsRequestEntry().withData( ByteBuffer.wrap(data) ).withPartitionKey("typebus")
     }
     .to(KinesisSink(kinesisStream, flowSettings))
     .run()
@@ -111,13 +113,57 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     tyebusMap ++= (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)).map(x => x -> context.actorOf(TypeBusActor.props(x, context.self)) ).toMap
     context.system.log.info(s"tyebusMap: ${tyebusMap}")
 
+
+    val consumerConfig = new KinesisClientLibConfiguration(
+      "typebus",
+      kinesisStream,
+      new DefaultAWSCredentialsProviderChain,
+      "kinesisWorker"
+    )
+      // CA - WARNING we only want to ignore SSL validation on localhost
+      .withCommonClientConfig(ignoringInvalidSslCertificates(new ClientConfiguration()))
+      .withCallProcessRecordsEvenForEmptyRecordList(true)
+      .withRegionName(kinesisRegion)
+
+      .withDynamoDBEndpoint("http://localhost:8000")
+      .withKinesisEndpoint(kinesisEndpoint.toString)
+      .withInitialPositionInStream(InitialPositionInStream.LATEST)
+
+    case class KeyMessage(key: String, data: Array[Byte], markProcessed: () => Unit)
+
+    val atLeastOnceSource = com.contxt.kinesis.KinesisSource(consumerConfig)
+
+    println("RUNNING !!!!")
+    println("#######################################################################")
+    println("#######################################################################")
+    atLeastOnceSource.map { kinesisRecord =>
+        println(s"kinesisRecord : ${kinesisRecord}")
+        KeyMessage(
+          kinesisRecord.partitionKey, kinesisRecord.data.toArray, kinesisRecord.markProcessed
+        )
+      }
+      .map { message =>
+        println(s"GOT mergedSource: ${message}")
+        val event = publishedEventReader.read(message.data)
+        if(!tyebusMap.contains(event.meta.eventType) )
+          tyebusMap += event.meta.eventType -> context.actorOf(TypeBusActor.props(event.meta.eventType, context.self))
+        tyebusMap(event.meta.eventType) ! event
+        event
+        // After a record is marked as processed, it is eligible to be checkpointed in DynamoDb.
+        message.markProcessed()
+        message
+      }.runWith(Sink.ignore)
+
+    /*
     // source-list
     val mergeSettings = shards.map { shardId =>
       ShardSettings(kinesisStream,
         shardId,
         ShardIteratorType.LATEST,
         refreshInterval = 1.second,
-        limit = 500)
+        limit = 500
+        //, consumerName = Some("typebus")
+      )
     }.toList
 
     val mergedSource: Source[Record, NotUsed] = KinesisSource.basicMerge(mergeSettings, amazonKinesisAsync)
@@ -130,12 +176,15 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
       tyebusMap(event.meta.eventType) ! event
       event
     }.runWith(Sink.ignore)
+    */
   }
 
   def receive: Receive = {
     case event: PublishedEvent =>
       context.system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
       try {
+        println(s"listOfServiceImplicitsReaders: ${listOfServiceImplicitsReaders}")
+        println(s"listOfImplicitsReaders: ${listOfImplicitsReaders}")
         val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
         context.system.log.debug(s"TypeBus: got publish: ${event}")
         context.system.log.debug(s"TypeBus: reader: ${reader}")

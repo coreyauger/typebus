@@ -14,11 +14,14 @@ lazy val `typebus-kinesis` =
 
 val akkaV = "2.5.13"
 
+resolvers in ThisBuild += Resolver.bintrayRepo("streetcontxt", "maven")
+
 libraryDependencies ++= Seq(
   "io.surfkit" %% "typebus" %  "0.0.5-SNAPSHOT",
   "com.typesafe.akka"       %% "akka-cluster" % akkaV,
   "com.typesafe.akka"       %% "akka-cluster-tools" % akkaV,
-  "com.lightbend.akka" %% "akka-stream-alpakka-kinesis" % "1.0-M1"
+  "com.streetcontxt"        %% "kcl-akka-stream" % "2.0.3",
+  "com.lightbend.akka"      %% "akka-stream-alpakka-kinesis" % "1.0-M1"
 )
 
 fork in ThisBuild := true

@@ -116,7 +116,7 @@ package object gen {
           val modelPath = Paths.get( path.mkString("/") )
           if(!Files.exists(modelPath))
             Files.createDirectories(modelPath)
-          val filePath = Paths.get( path.mkString("/") + "/data2.scala" )
+          val filePath = Paths.get( path.mkString("/") + "/data.scala" )
           println(s"modelPath: ${modelPath}")
           //if(!Files.exists(filePath)){
           println(s"file path: ${filePath}")

@@ -7,8 +7,9 @@ import io.surfkit.typebus.module.Service
 import avrohugger.format.Standard
 import avrohugger.types.ScalaCaseObjectEnum
 import io.surfkit.typebus.bus.kinesis.KinesisBus
-import scala.concurrent.duration._
+import io.surfkit.typebus.cluster.ZkCluserShadingSeedDiscovery
 
+import scala.concurrent.duration._
 import concurrent.Future
 
 
@@ -66,7 +67,6 @@ class KinesisGenActor extends Service[TypeBus] with KinesisBus[TypeBus] {
     Future.successful(Unit)
   }
 
-
   registerStream(genServiceDescription _)
   startTypeBus("")
 
@@ -74,7 +74,7 @@ class KinesisGenActor extends Service[TypeBus] with KinesisBus[TypeBus] {
   implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
 
   println("Waiting 2 sec to call getServiceDescriptor")
-  context.system.scheduler.scheduleOnce(2 seconds) {
+  context.system.scheduler.scheduleOnce(15 seconds) {
     println(s"*** Calling getServiceDescriptor: ${getServiceDescriptor}")
     publish(getServiceDescriptor)
   }
@@ -84,7 +84,7 @@ class KinesisGenActor extends Service[TypeBus] with KinesisBus[TypeBus] {
   * App to generate source code for a service.
   * This is just a Typebus Service[TypeBus]
   */
-object Main extends App {
+object Main extends App with ZkCluserShadingSeedDiscovery{
   println("Typebus Generator with args: " + (args mkString ", "))
 
   /*class ServiceThread(squbs: String, args: Array[String]) extends Thread {
@@ -98,6 +98,7 @@ object Main extends App {
   }*/
 
   implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+  zkCluserSeed(system).join()
   system.actorOf(Props(new KinesisGenActor))
 
   //val squbs = "org.squbs.unicomplex.Bootstrap"  // TODO: this is arg(0)

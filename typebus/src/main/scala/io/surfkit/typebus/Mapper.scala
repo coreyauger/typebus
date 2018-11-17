@@ -1,8 +1,39 @@
 package io.surfkit.typebus
 
 import java.io.ByteArrayOutputStream
-
 import com.sksamuel.avro4s._
+import org.apache.avro.Schema
+import org.joda.time.{DateTime, LocalDate}
+import org.joda.time.format.ISODateTimeFormat
+
+
+object Implicits{
+
+  implicit object DateTimeSchemaFor extends SchemaFor[DateTime] {
+    override val schema: Schema = Schema.create(Schema.Type.STRING)
+  }
+
+  implicit object DateTimeEncoder extends Encoder[DateTime] {
+    override def encode(value: DateTime, schema: Schema): AnyRef = ISODateTimeFormat.dateTime().print(value)
+  }
+
+  implicit object DateTimeDecoder extends Decoder[DateTime] {
+    override def decode(value: Any, schema: Schema): DateTime = ISODateTimeFormat.dateTime().parseDateTime(value.toString)
+  }
+
+
+  implicit object LocalDateTimeSchemaFor extends SchemaFor[LocalDate] {
+    override val schema: Schema = Schema.create(Schema.Type.STRING)
+  }
+
+  implicit object LocalDateEncoder extends Encoder[LocalDate] {
+    override def encode(value: LocalDate, schema: Schema): AnyRef = ISODateTimeFormat.dateTime().print(value)
+  }
+
+  implicit object LocalDateDecoder extends Decoder[LocalDate] {
+    override def decode(value: Any, schema: Schema): LocalDate = ISODateTimeFormat.dateTime().parseDateTime(value.toString).toLocalDate
+  }
+}
 
 /***
   * Schemacha - cheeky name for Schema wrapper

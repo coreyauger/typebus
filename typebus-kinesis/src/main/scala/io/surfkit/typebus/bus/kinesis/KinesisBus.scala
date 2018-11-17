@@ -124,7 +124,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
       .withCommonClientConfig(ignoringInvalidSslCertificates(new ClientConfiguration()))
       .withCallProcessRecordsEvenForEmptyRecordList(true)
       .withRegionName(kinesisRegion)
-
       .withDynamoDBEndpoint("http://localhost:8000")
       .withKinesisEndpoint(kinesisEndpoint.toString)
       .withInitialPositionInStream(InitialPositionInStream.LATEST)
@@ -132,15 +131,9 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     case class KeyMessage(key: String, data: Array[Byte], markProcessed: () => Unit)
 
     val atLeastOnceSource = com.contxt.kinesis.KinesisSource(consumerConfig)
-
-    println("RUNNING !!!!")
-    println("#######################################################################")
-    println("#######################################################################")
     atLeastOnceSource.map { kinesisRecord =>
         println(s"kinesisRecord : ${kinesisRecord}")
-        KeyMessage(
-          kinesisRecord.partitionKey, kinesisRecord.data.toArray, kinesisRecord.markProcessed
-        )
+        KeyMessage(kinesisRecord.partitionKey, kinesisRecord.data.toArray, kinesisRecord.markProcessed)
       }
       .map { message =>
         println(s"GOT mergedSource: ${message}")
@@ -148,7 +141,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
         if(!tyebusMap.contains(event.meta.eventType) )
           tyebusMap += event.meta.eventType -> context.actorOf(TypeBusActor.props(event.meta.eventType, context.self))
         tyebusMap(event.meta.eventType) ! event
-        event
         // After a record is marked as processed, it is eligible to be checkpointed in DynamoDb.
         message.markProcessed()
         message
@@ -183,8 +175,6 @@ trait KinesisBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams wi
     case event: PublishedEvent =>
       context.system.log.debug(s"TypeBus: got msg for topic: ${event.meta.eventType}")
       try {
-        println(s"listOfServiceImplicitsReaders: ${listOfServiceImplicitsReaders}")
-        println(s"listOfImplicitsReaders: ${listOfImplicitsReaders}")
         val reader = listOfServiceImplicitsReaders.get(event.meta.eventType).getOrElse(listOfImplicitsReaders(event.meta.eventType))
         context.system.log.debug(s"TypeBus: got publish: ${event}")
         context.system.log.debug(s"TypeBus: reader: ${reader}")

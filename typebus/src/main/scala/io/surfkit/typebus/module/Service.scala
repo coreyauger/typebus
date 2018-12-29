@@ -1,22 +1,37 @@
 package io.surfkit.typebus.module
 
-import akka.actor.ActorSystem
+import java.time.Instant
+
+import akka.actor.{ActorLogging, ActorSystem}
 import akka.util.Timeout
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
 
+import org.joda.time.DateTime
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
+
+object Service{
+  val registry = scala.collection.mutable.HashMap.empty[String, String]
+
+  def registerServiceType(serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
+    // CA - pretty cheesy data store.
+    registry += fqn -> serviceType.schema
+  }
+}
 
 /***
   * The main type for defining your service.
   * @tparam UserBaseType - the base trait all your service types inherit from
   */
-trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
+abstract class Service[UserBaseType](val serviceName: String) extends Module[UserBaseType] with AvroByteStreams {
 
-  val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
+  val upTime = Instant.now()
+  val serviceId = UUID.randomUUID().toString
+  val serviceIdentifier = ServiceIdentifier(serviceName, serviceId)
 
   /***
     * registerStream - register a service level function
@@ -86,16 +101,20 @@ trait Service[UserBaseType] extends Module[UserBaseType] with AvroByteStreams{
       meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
   }
 
-  // TODO: macro to capture the types and add it to the service definition.
-  //def publish[T <: UserBaseType : ClassTag](obj: T)(implicit reader: ByteStreamReader[T]) = {}
-
   def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(
     service = serviceName,
+    serviceId = serviceId,
+    upTime = upTime,
     serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit").map{
       case (in, out) =>
         val reader = listOfImplicitsReaders(in)
         val writer = listOfImplicitsWriters(out)
-        ServiceMethod(InType(in, reader.schema), OutType(out, writer.schema))
-    }
+        Service.registry += in -> reader.schema
+        Service.registry += out -> writer.schema
+        ServiceMethod(InType(in), OutType(out))
+    },
+    types = Service.registry.map{
+      case (fqn, schema) => fqn -> TypeSchema(fqn, schema)
+    }.toMap
   )
 }

@@ -1,72 +1,9 @@
 package io.surfkit.typebus
 
-import java.io.ByteArrayOutputStream
 import com.sksamuel.avro4s._
-import org.apache.avro.Schema
-import org.joda.time.{DateTime, LocalDate}
-import org.joda.time.format.ISODateTimeFormat
-
-
-object Implicits{
-
-  implicit object DateTimeSchemaFor extends SchemaFor[DateTime] {
-    override val schema: Schema = Schema.create(Schema.Type.STRING)
-  }
-
-  implicit object DateTimeEncoder extends Encoder[DateTime] {
-    override def encode(value: DateTime, schema: Schema): AnyRef = ISODateTimeFormat.dateTime().print(value)
-  }
-
-  implicit object DateTimeDecoder extends Decoder[DateTime] {
-    override def decode(value: Any, schema: Schema): DateTime = ISODateTimeFormat.dateTime().parseDateTime(value.toString)
-  }
-
-
-  implicit object LocalDateTimeSchemaFor extends SchemaFor[LocalDate] {
-    override val schema: Schema = Schema.create(Schema.Type.STRING)
-  }
-
-  implicit object LocalDateEncoder extends Encoder[LocalDate] {
-    override def encode(value: LocalDate, schema: Schema): AnyRef = ISODateTimeFormat.dateTime().print(value)
-  }
-
-  implicit object LocalDateDecoder extends Decoder[LocalDate] {
-    override def decode(value: Any, schema: Schema): LocalDate = ISODateTimeFormat.dateTime().parseDateTime(value.toString).toLocalDate
-  }
-}
-
-/***
-  * Schemacha - cheeky name for Schema wrapper
-  */
-trait Schemacha{
-  def schema: String
-}
-
-/***
-  * ByteStreamWriter - define a class that knows how to serialize a type A
-  * @tparam A - the type to be serialized
-  */
-trait ByteStreamWriter[A] extends Schemacha{
-  /***
-    * write - take a type A to Array[Byte]
-    * @param value of type A
-    * @return Array[Byte]
-    */
-  def write(value: A): Array[Byte]
-}
-
-/***
-  * ByteStreamReader - define a class that knows how to read Array[Byte] and make a type A
-  * @tparam A - the type A
-  */
-trait ByteStreamReader[A] extends Schemacha{
-  /***
-    * read - take an Array[Byte] and make a type A
-    * @param bytes - Array[Byte]
-    * @return - a type A
-    */
-  def read(bytes: Array[Byte]): A
-}
+import io.surfkit.typebus.event._
+import scala.reflect.ClassTag
+import java.io.ByteArrayOutputStream
 
 /***
   * AvroByteStreams - defualt type serialization for typebus
@@ -79,7 +16,7 @@ trait AvroByteStreams{
     * @param ev$2 - Decoder
     * @tparam T - the type T
     */
-  class AvroByteStreamReader[T : SchemaFor : Decoder] extends ByteStreamReader[T]{
+  class AvroByteStreamReader[T : SchemaFor : Decoder : ClassTag] extends ByteStreamReader[T]{
     val avroSchema = AvroSchema[T]
 
     /***
@@ -106,7 +43,7 @@ trait AvroByteStreams{
     * @param ev$2 - Encoder
     * @tparam T - tye type T
     */
-  class AvroByteStreamWriter[T : SchemaFor : Encoder] extends ByteStreamWriter[T]{
+  class AvroByteStreamWriter[T : SchemaFor : Encoder : ClassTag] extends ByteStreamWriter[T]{
     val avroSchema = AvroSchema[T]
 
     /***
@@ -128,10 +65,29 @@ trait AvroByteStreams{
       */
     override def schema: String = avroSchema.toString
   }
+
+  implicit val HbReader = new AvroByteStreamReader[Hb]
+  implicit val HbWriter = new AvroByteStreamWriter[Hb]
+  implicit val ServiceExceptionReader = new AvroByteStreamReader[ServiceException]
+  implicit val ServiceExceptionWriter = new AvroByteStreamWriter[ServiceException]
+  implicit val publishedEventReader = new AvroByteStreamReader[PublishedEvent]
+  implicit val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
+  implicit val socketEventReader = new AvroByteStreamReader[SocketEvent]
+  implicit val socketEventWriter = new AvroByteStreamWriter[SocketEvent]
+  implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
+  implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
+  implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
+  implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
+  implicit val OutEventTraceReader = new AvroByteStreamReader[OutEventTrace]
+  implicit val OutEventTraceWriter = new AvroByteStreamWriter[OutEventTrace]
+  implicit val InEventTraceReader = new AvroByteStreamReader[InEventTrace]
+  implicit val InEventTraceWriter = new AvroByteStreamWriter[InEventTrace]
+  implicit val ExceptionTraceReader = new AvroByteStreamReader[ExceptionTrace]
+  implicit val ExceptionTraceWriter = new AvroByteStreamWriter[ExceptionTrace]
+
 }
 
 
-// CA: FUTURE: we could allow for json as well..
 trait JsonStreamWriter[A] extends Schemacha{
   def write(value: A): String
 }
@@ -141,15 +97,13 @@ trait JsonStreamReader[A] extends Schemacha{
 }
 
 trait AvroJsonStream{
+  import io.surfkit.typebus.Implicits._
 
   class AvroJsonStreamReader[T : SchemaFor : Decoder] extends JsonStreamReader[T] {
     val avroSchema = AvroSchema[T]
 
     override def read(json: String): T = {
-      println(s"avroSchema: ${avroSchema}")
       val input = AvroInputStream.json[T].from(json.getBytes).build(avroSchema)
-      println(s"input: ${input}")
-      println(s"input.iterator.toSeq: ${input.iterator.toSeq}")
       val result = input.iterator.toSeq
       result.head
     }
@@ -170,5 +124,7 @@ trait AvroJsonStream{
 
     override def schema: String = avroSchema.toString
   }
+
 }
+
 

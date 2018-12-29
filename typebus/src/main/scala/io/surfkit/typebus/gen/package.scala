@@ -17,17 +17,17 @@ package object gen {
   final case class Fqn(id: String) extends Gen
 
   /***
-    * GeneratedCaseClass - The scala code for an avro generated case class type
+    * GeneratedClass - The scala code for an avro generated case class type
     * @param fqn - the Fully Qualified Name of a type.
     * @param packageName - Package this cases class resides in.
     * @param simpleName - The Simple Name for the case class
-    * @param caseClassRep - The scala source code for this type
+    * @param caseClassRep - The "scala/typescript/python" source code for this type
     */
-  final case class GeneratedCaseClass(
+  final case class GeneratedClass(
                                  fqn: Fqn,
                                  packageName: String,
                                  simpleName: String,
-                                 caseClassRep: String
+                                 classRep: String
                                ) extends Gen
 
   /***
@@ -41,6 +41,16 @@ package object gen {
                                    ) extends Gen
 
   /***
+    * Language - type of lang you want code for.
+    */
+  sealed trait Language
+  object Language{
+    case object Scala extends Language
+    case object Typescript extends Language
+    case object Python extends Language
+  }
+
+  /***
     * ServiceGenerator - Store information needed to generate types and RPC client to a service.
     * @param serviceName - The name of the service
     * @param methods - All the service level methods that have been declared.
@@ -48,8 +58,9 @@ package object gen {
     */
   final case class ServiceGenerator(
                              serviceName: String,
+                             language: Language,
                              methods: Seq[ServiceMethodGenerator],
-                             caseClasses: Set[GeneratedCaseClass]
+                             classes: Set[GeneratedClass]
                              ) extends Gen
 
 
@@ -65,19 +76,22 @@ package object gen {
       * @param generator - ServiceGenerator definition
       * @return - List of tuple containing (package name, source code).
       */
-    def writeService(generator: ServiceGenerator): List[(String, String)] = {
+    def writeService(busType: String, generator: ServiceGenerator): List[(String, String)] = {
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
-      generator.caseClasses.groupBy(_.packageName).map{
+      val fqlToCaseClass = generator.classes.map(x => x.fqn -> x).toMap
+      generator.classes.groupBy(_.packageName).map{
         case (packageName, classes) =>
           val sb = new StringBuffer()
           sb.append("/** MACHINE-GENERATED FROM AVRO SCHEMA. DO NOT EDIT DIRECTLY */\n\n")
           sb.append(s"package ${packageName.split('.').reverse.drop(1).reverse.mkString(".")}\n\n")
           sb.append("import akka.actor.ActorSystem\n")
+          sb.append("import io.surfkit.typebus.Implicits._\n")
           sb.append("import scala.concurrent.Future\n")
           sb.append("import io.surfkit.typebus._\n")
-          sb.append("import io.surfkit.typebus.client._\n\n")
+          sb.append("import io.surfkit.typebus.client._\n")
+          sb.append("import io.surfkit.typebus.event.ServiceIdentifier\n\n")
           sb.append(s"package object ${packageName.split('.').last}{\n\n")
-          sb.append( classes.map(x => "  "+ x.caseClassRep).mkString("\n") )
+          sb.append( classes.map(x => "  "+ x.classRep).mkString("\n") )
           sb.append(s"\n\n  object Implicits extends AvroByteStreams{\n")
           sb.append( classes.map{ cc =>
             s"""
@@ -89,14 +103,23 @@ package object gen {
           // add the client mappings...
           sb.append("\n\n  /** Generated Actor Client */\n")
 
-          sb.append(s"  class ${serviceToClassName(generator.serviceName)}Client(implicit system: ActorSystem) extends Client{\n")
+          sb.append(s"  class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
           sb.append( "    import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
-          val fqlToCaseClass = classes.map(x => x.fqn -> x).toMap
+          //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")
           sb.append( methodsInThisPackage.map{ method =>
+            try{
+              val inType = fqlToCaseClass(method.in)
+              val outType = fqlToCaseClass(method.out)
+            }catch{
+              case t: Throwable =>
+                println("\n\nfqlToCaseClass MAP ******************************")
+                println(fqlToCaseClass)
+                println("\n\n")
+            }
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"     def ${inType.simpleName}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
+            s"     def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
           }.mkString("\n") )
           sb.append(s"\n  }")
 
@@ -109,18 +132,22 @@ package object gen {
       * writeCodeToFiles - writes the source code to the project directory to be compiled
       * @param generator - ServiceGenerator definition
       */
-    def writeCodeToFiles(generator: ServiceGenerator) = {
-      writeService(generator).foreach{
-        case (packageName, sourceCode) =>
-          val path = (List("src", "main", "scala") ::: packageName.split('.').toList).toArray
-          val modelPath = Paths.get( path.mkString("/") )
-          if(!Files.exists(modelPath))
-            Files.createDirectories(modelPath)
-          val filePath = Paths.get( path.mkString("/") + "/data.scala" )
-          println(s"modelPath: ${modelPath}")
-          //if(!Files.exists(filePath)){
-          println(s"file path: ${filePath}")
-          Files.write(filePath, sourceCode.getBytes)
+    def writeCodeToFiles(busType: String, generator: ServiceGenerator, basePath: List[String] = List("src", "main", "scala")) = {
+      try {
+        writeService(busType, generator).foreach {
+          case (packageName, sourceCode) =>
+            val path = (basePath ::: packageName.split('.').toList).toArray
+            val modelPath = Paths.get(path.mkString("/"))
+            if (!Files.exists(modelPath))
+              Files.createDirectories(modelPath)
+            val filePath = Paths.get(path.mkString("/") + "/data.scala")
+            //if(!Files.exists(filePath)){
+            Files.write(filePath, sourceCode.getBytes)
+        }
+      }catch{
+        case t:Throwable =>
+          println(s"ERROR: ${t.getMessage}")
+          t.printStackTrace()
       }
 
     }

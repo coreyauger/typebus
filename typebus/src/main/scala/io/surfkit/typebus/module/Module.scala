@@ -40,7 +40,6 @@ trait Module[UserBaseType] {
     listOfPartials = p :: listOfPartials
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
-    println(s"partial: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 
@@ -60,7 +59,6 @@ trait Module[UserBaseType] {
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
-    println(s"partial with meta: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 
@@ -76,7 +74,6 @@ trait Module[UserBaseType] {
     listOfFunctions = (topic, "scala.Unit") :: listOfFunctions
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
-    println(s"partial with meta unit: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 
@@ -96,7 +93,6 @@ trait Module[UserBaseType] {
     listOfServicePartialsWithMeta = p :: listOfServicePartialsWithMeta
     listOfServiceImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[TypeBus]])
     listOfServiceImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[TypeBus]])
-    println(s"partial with meta: ${p} ${scala.reflect.classTag[T].runtimeClass.getCanonicalName}")
     Unit
   }
 

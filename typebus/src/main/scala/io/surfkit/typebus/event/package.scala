@@ -1,11 +1,39 @@
 package io.surfkit.typebus
 
+import java.time.Instant
+
 package object event {
 
   /***
     * TypeBus - base type
     */
   sealed trait TypeBus{}
+
+  trait Trace extends TypeBus{
+    def service: String
+    def serviceId: String
+    def event: PublishedEvent
+  }
+  case class ServiceException(
+               message: String,
+               stackTrace: Seq[String],
+               extra: Map[String, String] = Map.empty
+  ) extends TypeBus
+
+  case class InEventTrace(
+               service: String,
+               serviceId: String,
+               event: PublishedEvent) extends Trace
+
+  case class OutEventTrace(
+                 service: String,
+                 serviceId: String,
+                 event: PublishedEvent) extends Trace
+  case class ExceptionTrace(
+                 service: String,
+                 serviceId: String,
+                 event: PublishedEvent
+               ) extends Trace
 
   /***
     *  EventType - wrap the Fully Qualified Name of a type
@@ -18,19 +46,27 @@ package object event {
     def fqn: String
   }
 
+
   /***
     * InType - This is the type passed IN to a service method
     * @param fqn - Fully Qualified Name of Type
-    * @param schema - The Avro Schema
+    * @param schema - The Avro(or other) Schema
     */
-  case class InType(fqn: String, schema: String) extends EventType
+  case class InType(fqn: String) extends EventType
 
   /***
     * OutType - This is the type passed OUT of a service function
     * @param fqn - Fully Qualified Name of Type
-    * @param schema - The Avro Schema
+    * @param schema - The Avro(or other) Schema
     */
-  case class OutType(fqn: String, schema: String) extends EventType
+  case class OutType(fqn: String) extends EventType
+
+  /***
+    * Store the Fqn and the schema for the type.  The fqn can serve as a lookup for that types schema
+    * @param fqn - Fully Qualified Name of Type
+    * @param schema - The Avro(or other) Schema
+    */
+  case class TypeSchema(fqn: String, schema: String) extends TypeBus
 
   /***
     * ServiceMethod - a mapping from In to Future[Out]
@@ -39,6 +75,8 @@ package object event {
     */
   case class ServiceMethod(in: InType, out: OutType) extends TypeBus
 
+  case class ServiceIdentifier(service: String, serviceId: String) extends TypeBus
+
   /***
     * ServiceDescriptor - fully describe a service
     * @param service - the name of the service
@@ -46,7 +84,10 @@ package object event {
     */
   case class ServiceDescriptor(
                               service: String,
-                              serviceMethods: Seq[ServiceMethod]
+                              serviceId: String,
+                              upTime: Instant,
+                              serviceMethods: Seq[ServiceMethod],
+                              types: Map[String, TypeSchema]
                               ) extends TypeBus
 
   /***
@@ -71,12 +112,13 @@ package object event {
                        eventType: String,
                        source: String,
                        correlationId: Option[String],
+                       trace: Boolean = false,
                        directReply: Option[String] = None,
                        userId: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,
-                       extra: Map[String, String] = Map.empty
-                       /*occurredAt: DateTime*/) extends TypeBus
+                       extra: Map[String, String] = Map.empty,
+                       occurredAt: Instant = Instant.now()) extends TypeBus
 
   /***
     * SocketEvent - event for passing data down a socket to a client.
@@ -97,6 +139,8 @@ package object event {
                              meta: EventMeta,
                              payload: Array[Byte]
                               ) extends TypeBus
+
+  final case class Hb(ts: Long) extends TypeBus
 
 }
 

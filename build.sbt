@@ -10,10 +10,14 @@ lazy val root =
   (project in file("."))
   .aggregate(`typebus`)
   .aggregate(`typebus-kafka`)
+  .aggregate(`telemetry`)
+
 
 val `typebus` = ProjectRef(file("typebus"), "typebus")
 
 val `typebus-kafka` = ProjectRef(file("typebus-kafka"), "typebus-kafka")
+
+val `telemetry` = ProjectRef(file("telemetry/server"), "telemetry")
 
 fork in ThisBuild := true
 

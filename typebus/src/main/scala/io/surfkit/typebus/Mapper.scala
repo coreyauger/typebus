@@ -97,7 +97,6 @@ trait JsonStreamReader[A] extends Schemacha{
 }
 
 trait AvroJsonStream{
-  import io.surfkit.typebus.Implicits._
 
   class AvroJsonStreamReader[T : SchemaFor : Decoder] extends JsonStreamReader[T] {
     val avroSchema = AvroSchema[T]

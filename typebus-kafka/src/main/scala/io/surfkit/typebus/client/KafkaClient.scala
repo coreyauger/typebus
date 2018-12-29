@@ -10,7 +10,7 @@ import io.surfkit.typebus.actors.GatherActor
 import io.surfkit.typebus.bus.Publisher
 import io.surfkit.typebus.event._
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
-import org.joda.time.DateTime
+import java.time.Instant
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -64,7 +64,7 @@ class KafkaClient(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSy
           eventType = event.getClass.getCanonicalName,
           correlationId = None,
           trace = false,
-          occurredAt = DateTime.now
+          occurredAt = Instant.now
         ),
         payload = event match{
           case x: OutEventTrace => OutEventTraceWriter.write(x)

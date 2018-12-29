@@ -21,6 +21,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import java.util.UUID
+import java.time.Instant
 
 import org.joda.time.DateTime
 
@@ -55,7 +56,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
               eventType = event.getClass.getCanonicalName,
               correlationId = None,
               trace = false,
-              occurredAt = DateTime.now
+              occurredAt = Instant.now
             ),
             payload = event match{
               case x: OutEventTrace => service.OutEventTraceWriter.write(x)
@@ -146,7 +147,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
               eventId = UUID.randomUUID.toString,
               eventType = x._3.getClass.getCanonicalName,
               responseTo = Some(x._2.meta.eventId),
-              occurredAt = DateTime.now()
+              occurredAt = Instant.now()
             ),
             payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
               writer.write(x._3.asInstanceOf[TypeBus])

@@ -212,9 +212,8 @@ class App extends React.Component<Props & WithStyles<typeof styles>, State> {
             }}
             open={this.state.open}>
             <div className={classes.toolbarIcon}>
-              <div style={ {position: "absolute", left: "25px"} }>
-                    {/* TYPEBUS LOGO HERE */}                         
-              </div>
+              <img src="/imgs/typebus-logo.png" alt="logo" style={ {"width":"66%"} } />            
+              
               <IconButton onClick={this.handleDrawerClose}>
                 <ChevronLeftIcon />
               </IconButton>

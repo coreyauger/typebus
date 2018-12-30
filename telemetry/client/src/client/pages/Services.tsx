@@ -88,7 +88,7 @@ class Services extends React.Component<Props & WithStyles<typeof styles>, State>
       <Grid container spacing={24}>
           {serviceList.map( (x: ServiceDescriptor) => <Grid item xs={4} key={x.serviceId}><ServiceCard serviceDescriptor={x} onMethodSelect={this.onMethodSelect} onServiceSelect={this.onServiceTypeSelect} /></Grid> )}
       </Grid>)}
-      <TriggerEventDialog open={this.state.selectedMethod != undefined} method={this.state.selectedMethod} onClose={this.clearMethodSelect} onTriggerEvent={this.onTriggerEvent} />  
+      <TriggerEventDialog open={this.state.selectedMethod != undefined} method={this.state.selectedMethod} store={this.props.store} onClose={this.clearMethodSelect} onTriggerEvent={this.onTriggerEvent} />  
       <Dialog onClose={this.handleTraceClose} aria-labelledby="simple-dialog-title" open={this.state.selectedTrace != undefined} maxWidth="lg">
         <TraceEventDetails trace={this.state.selectedTrace} store={this.props.store} />
       </Dialog>

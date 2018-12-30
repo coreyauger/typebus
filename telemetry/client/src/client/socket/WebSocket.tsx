@@ -8,8 +8,9 @@ const WS_OPEN = 1
 const typeMap = {
     "io.surfkit.typebus.event.package.ServiceDescriptor" : (socketEvent: SocketEvent) =>{        
         const data = Serializers.serviceDescriptorType.fromBuffer( Buffer.from(socketEvent.payload) )
-        console.log("data", data)
+        console.log("data2", data)
         const serviceDescriptor = data as ServiceDescriptor
+        console.log("serviceDescriptor", serviceDescriptor)
         stores.serviceStore.addService(serviceDescriptor)
         // CA - you can gen typescript types below 
         /*
@@ -26,7 +27,7 @@ const typeMap = {
         const trace = data as InEventTrace
         trace.id = socketEvent.meta.eventId
         trace.dir = "in"
-        trace.time = Date.parse(socketEvent.meta.occurredAt)
+        trace.time = socketEvent.meta.occurredAt
         stores.traceStore.addTrace(trace)  
     },
     "io.surfkit.typebus.event.package.OutEventTrace" : (socketEvent: SocketEvent) =>{        
@@ -35,7 +36,7 @@ const typeMap = {
         const trace = data as OutEventTrace
         trace.id = socketEvent.meta.eventId
         trace.dir = "out"
-        trace.time = Date.parse(socketEvent.meta.occurredAt)
+        trace.time = socketEvent.meta.occurredAt
         stores.traceStore.addTrace(trace)  
     },
     "io.surfkit.typebus.event.package.ExceptionTrace" : (socketEvent: SocketEvent) =>{        
@@ -44,11 +45,11 @@ const typeMap = {
         const trace = data as ExceptionTrace
         trace.id = socketEvent.meta.eventId 
         trace.dir = "ex"
-        trace.time = Date.parse(socketEvent.meta.occurredAt)
+        trace.time = socketEvent.meta.occurredAt
         stores.traceStore.addTrace(trace)  
     },      
 }
-
+ 
 
 const toArrayBuffer = (blob: Blob): Promise<Uint8Array> => {
     return new Promise(resolve => {
@@ -152,7 +153,7 @@ export class TypebusSocket{
                 socketId: null, 
                 responseTo: null,
                 extra: {},
-                occurredAt: toDateTime(new Date())
+                occurredAt: new Date().getTime()
             } as EventMeta,
             payload: payload
         }

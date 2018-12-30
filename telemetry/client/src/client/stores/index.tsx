@@ -31,9 +31,8 @@ class ServiceStore {
     addService(s: ServiceDescriptor) {
         this.services.push(s)
         let updates = {}
-        s.serviceMethods.forEach( x => {
-            updates[x.in.fqn] = avro.Type.forSchema(JSON.parse(x.in.schema))
-            updates[x.out.fqn] = avro.Type.forSchema(JSON.parse(x.out.schema))
+        Object.keys(s.types).map(x => s.types[x]).forEach( x => {
+            updates[x.fqn] = JSON.parse(x.schema) as RecordType         
         })
         this.schema = {...this.schema, ...updates}
     }

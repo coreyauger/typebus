@@ -14,84 +14,12 @@ import InputAdornment from '@material-ui/core/InputAdornment';
 import TextField from '@material-ui/core/TextField';
 import AlarmAdd from '@material-ui/icons/AlarmAdd';
 import withRoot from '../withRoot';
-import { RecordType } from 'avro-typescript';
 import { TriggerEvent } from '../socket/WebSocket';
 import * as brace from 'brace';
 
 import 'brace/mode/javascript';
 import 'brace/theme/github';
-
-export interface Schema {}
-
-export type Type = NameOrType | NameOrType[];
-export type NameOrType = TypeNames | RecordType | ArrayType | NamedType;
-export type TypeNames = "record" | "array" | "null" | "map" | string;
-
-export interface Field {
-	name: string;
-	type: Type;
-	default?: string | number | null | boolean;
-}
-
-export interface BaseType {
-	type: TypeNames;
-}
-
-export interface RecordType extends BaseType {
-	type: "record";
-	name: string;
-	fields: Field[];
-}
-
-export interface ArrayType extends BaseType {
-	type: "array";
-	items: Type;
-}
-
-export interface MapType extends BaseType {
-	type: "map";
-	values: Type;
-}
-
-export interface EnumType extends BaseType {
-	type: "enum";
-	name: string;
-	symbols: string[];
-}
-
-export interface NamedType extends BaseType {
-	type: string;
-}
-
-export function isRecordType(type: BaseType): type is RecordType {
-	return type.type === "record";
-}
-
-export function isArrayType(type: BaseType): type is ArrayType {
-	return type.type === "array";
-}
-
-export function isMapType(type: BaseType): type is MapType {
-	return type.type === "map";
-}
-
-export function isEnumType(type: BaseType): type is EnumType {
-	return type.type === "enum";
-}
-
-export function isUnion(type: Type): type is NamedType[] {
-	return type instanceof Array;
-}
-
-export function isOptional(type: Type): boolean {
-	if (isUnion(type)) {
-		const t1 = type[0];
-		if (typeof t1 === "string") {
-			return t1 === "null";
-		}
-	}
-}
-
+import { Field, EnumType, RecordType, isRecordType, isArrayType, isMapType, isEnumType, Type } from 'avro-typescript/lib/model';
 
 const styles = (theme: Theme) =>
   createStyles({
@@ -117,7 +45,8 @@ interface State {
 interface Props {
   onClose: () => void;  
   method: ServiceMethod;  
-  open: boolean
+  store: any;  
+  open: boolean;
   onTriggerEvent: (TriggerEvent) => void;
 };
 
@@ -143,14 +72,14 @@ class TriggerEventDialog extends React.Component<Props & WithStyles<typeof style
     this.props.onTriggerEvent({
       event: JSON.parse(this.json), 
       fqn: this.props.method.in.fqn,
-      avroSchema: JSON.parse(this.props.method.in.schema) as RecordType,
+      avroSchema: this.props.store.serviceStore.schema[this.props.method.in.fqn] as RecordType,
       delay: this.state.delay} as TriggerEvent)
     this.handleClose();
   }
 
   convertFieldDec(field: Field, buffer: string): string {
     // Union Type
-    return `\t"${field.name}": ${this.convertType(field.type, buffer)};`;
+    return `\t"${field.name}": ${this.convertType(field.type, buffer)}`;
   }
 
   convertEnum(enumType: EnumType, buffer: string): string {
@@ -253,9 +182,9 @@ class TriggerEventDialog extends React.Component<Props & WithStyles<typeof style
             theme="github"            
             onChange={this.onChange}
             setOptions={ {readOnly: this.state.tab == 1} }
-            name={method && method.in.schema}
+            name={method &&  method.in.fqn}
             editorProps={{$blockScrolling: true}}
-            value={method && (this.state.tab == 0 ? this.avroToJson(JSON.parse(method.in.schema) as RecordType) : JSON.stringify(JSON.parse(method.in.schema),null,'\t') )}
+            value={method && (this.state.tab == 0 ? this.avroToJson(this.props.store.serviceStore.schema[this.props.method.in.fqn] as RecordType) : JSON.stringify(this.props.store.serviceStore.schema[this.props.method.in.fqn],null,'\t') )}
           />     
           <div className={classes.buttonBar}>
           <TextField

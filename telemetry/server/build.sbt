@@ -23,7 +23,7 @@ libraryDependencies ++= Seq(
   "io.surfkit" %% "typebus-kafka" % "0.0.5-SNAPSHOT",
   "io.surfkit" %% "typebus-squbs" % "0.0.1-SNAPSHOT",
   "com.typesafe.akka" %% "akka-cluster-sharding" % akkaV,
-  "com.typesafe.akka" %% "akka-persistence-dynamodb" % "1.1.1",
+  "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.91",
   "com.datastax.cassandra" % "cassandra-driver-core" % "3.6.0",
   "com.codahale.metrics" % "metrics-jvm" % "3.0.2"
 )

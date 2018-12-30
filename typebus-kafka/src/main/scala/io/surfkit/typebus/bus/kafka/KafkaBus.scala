@@ -159,11 +159,11 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
-    system.log.debug(s"STARTING TO LISTEN ON TOPICS:\n ${listOfFunctions.map(_._1)}")
+    system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1))}")
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)) :_*))
       .mapAsyncUnordered(4) { msg =>
-        system.log.debug(s"TypeBus: got msg for topic: ${msg.record.topic()}")
+        system.log.info(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         val publish = service.publishedEventReader.read(msg.record.value())
         try {
           traceEvent({ s: ServiceIdentifier =>

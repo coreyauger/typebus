@@ -77,16 +77,6 @@ export interface ServiceException{
     extra: any
 }
 
-export interface PlaidLink{
-    consumerId: string;
-    publicToken: string;
-}
-export interface YodleeLink{
-    consumerId: string;
-    user: string;
-    pass: string;
-}
-
 export interface RefreshAllAccounts{
     consumerId: string;
 }

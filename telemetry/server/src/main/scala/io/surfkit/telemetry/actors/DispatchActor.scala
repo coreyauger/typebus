@@ -8,7 +8,7 @@ import akka.actor._
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import io.surfkit.telemetry.cluster.UserActor
 import io.surfkit.typebus.module.Service
-import io.surfkit.typebus.bus.kinesis.KinesisBus
+import io.surfkit.typebus.bus.kafka.KafkaBus
 import io.surfkit.typebus.event.{EventMeta, ServiceDescriptor}
 import io.surfkit.typebus.event._
 import scala.concurrent.Future
@@ -18,7 +18,7 @@ object DispatchActor{
   var adminUserIds = Set.empty[String]
 }
 
-class DispatchActor extends Service[Any]("telemetry-dispatch") with Actor with ActorLogging with KinesisBus[Any] with AvroByteStreams{
+class DispatchActor extends Service[Any]("telemetry-dispatch") with Actor with ActorLogging with KafkaBus[Any] with AvroByteStreams{
   implicit val system = context.system
   import system.dispatcher
 
@@ -71,6 +71,10 @@ class DispatchActor extends Service[Any]("telemetry-dispatch") with Actor with A
       ))
     }
     Future.successful(Unit)
+  }
+
+  override def receive = {
+    case _ =>
   }
 
   registerStream(handleServiceDescriptor _)

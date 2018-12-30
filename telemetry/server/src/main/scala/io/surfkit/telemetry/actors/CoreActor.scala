@@ -7,11 +7,10 @@ import akka.util.Timeout
 import scala.concurrent.duration._
 import io.surfkit.telemetry.cluster.UserActor
 import io.surfkit.telemetry.data.BaseType
-import io.surfkit.typebus.bus.kinesis.KinesisBus
+import io.surfkit.typebus.bus.kafka.KafkaBus
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
-import org.joda.time.DateTime
-
+import java.time.Instant
 object CoreActor {
 
   sealed trait Socket
@@ -21,14 +20,14 @@ object CoreActor {
     def toPublishedEvent:PublishedEvent = PublishedEvent(
       meta = data.meta.copy(
         eventId = UUID.randomUUID().toString,
-        occurredAt = DateTime.now()
+        occurredAt = Instant.now()
       ),
       payload = data.payload)
 
   }
 }
 
-class CoreActor extends Service[BaseType]("core-actor") with Actor with KinesisBus[BaseType] with ActorLogging{
+class CoreActor extends Service[BaseType]("core-actor") with Actor with KafkaBus[BaseType] with ActorLogging{
   implicit val system = context.system
   var subscriberToUserId = Map.empty[ActorRef, String]
   var socketIdToSubscriber = Map.empty[UUID, ActorRef]  // HACK: way to handle Disconnect faster then "actor.watch"

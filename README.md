@@ -1,4 +1,4 @@
-# type-bus
+# typebus
 Framework for building distributed microserviceies in scala with akka-streams and kafka
 
 As functional programmers we know the value of modeling our system with strong types.  Functions simply are a mapping from one type to another.  Typebus extends this to the service design level.  Typebus defines:

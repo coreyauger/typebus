@@ -13,12 +13,7 @@ import io.surfkit.typebus.event.{EventMeta, ServiceDescriptor}
 import io.surfkit.typebus.event._
 import scala.concurrent.Future
 
-object DispatchActor{
-  // CA - HACK: this is a pretty lame hack to broadcast all the trace messages..
-  var adminUserIds = Set.empty[String]
-}
-
-class DispatchActor extends Service[Any]("telemetry-dispatch") with Actor with ActorLogging with KafkaBus[Any] with AvroByteStreams{
+class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLogging with KafkaBus[Any] with AvroByteStreams{
   implicit val system = context.system
   import system.dispatcher
 

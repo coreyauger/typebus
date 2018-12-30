@@ -24,7 +24,7 @@
     "express": "4.14.0",
     "googleapis": "^35.0.0",
     "gulp-ts": "^0.3.0",
-    "mobx": "^5.5.2",
+    "mobx": "5.5.2",
     "mobx-react": "^5.3.6",
     "mobx-react-router": "^4.0.5",
     "react": "^16.6.0",

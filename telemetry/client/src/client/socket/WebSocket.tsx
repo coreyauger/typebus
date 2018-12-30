@@ -1,4 +1,4 @@
-import {ServiceDescriptor, SocketEvent, EventMeta, toDateTime, Serializers, InEventTrace, ExceptionTrace, OutEventTrace, SerializerMappings, PlaidLink, RefreshAllAccounts, YodleeLink} from '../stores/data';
+import {ServiceDescriptor, SocketEvent, EventMeta, toDateTime, Serializers, InEventTrace, ExceptionTrace, OutEventTrace, SerializerMappings} from '../stores/data';
 import stores from '../stores'
 import { avroToTypeScript, RecordType } from "avro-typescript"
 const avro = require('avsc');

@@ -13,7 +13,7 @@ val akkaV = "2.5.13"
 
 libraryDependencies ++= Seq(
   "io.surfkit" %% "typebus" %  "0.0.5-SNAPSHOT",
-  "com.typesafe.akka" %% "akka-stream-kafka" % "0.22"
+  "com.typesafe.akka" %% "akka-stream-kafka" % "1.0-RC1"
 )
 
 fork in ThisBuild := true

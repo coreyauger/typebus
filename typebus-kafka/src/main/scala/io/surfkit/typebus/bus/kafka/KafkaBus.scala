@@ -103,10 +103,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
          | kka.remote.netty.tcp.hostname                    ${cfg.getString("akka.remote.netty.tcp.hostname")}
          | akka.remote.netty.tcp.port                       ${cfg.getString("akka.remote.netty.tcp.port")}
          | akka.cluster.roles                               ${cfg.getStringList("akka.cluster.roles")}
-         | bus.kinesis.stream                               ${cfg.getString("bus.kinesis.stream")}
-         | bus.kinesis.endpoint                             ${cfg.getString("bus.kinesis.endpoint")}
-         | bus.kinesis.region                               ${cfg.getString("bus.kinesis.region")}
-         | bus.kinesis.dynamo.endpoint                      ${cfg.getString("bus.kinesis.dynamo.endpoint")}
+         | bus.kafka                                        ${cfg.getString("bus.kafka")}
          | bus.trace                                        ${cfg.getBoolean("bus.trace")}
          |********************************************************************************************************
     """.stripMargin)

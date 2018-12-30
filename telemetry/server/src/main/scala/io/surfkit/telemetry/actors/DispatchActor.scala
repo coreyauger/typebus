@@ -21,8 +21,6 @@ object DispatchActor{
 class DispatchActor extends Service[Any]("telemetry-dispatch") with Actor with ActorLogging with KinesisBus[Any] with AvroByteStreams{
   implicit val system = context.system
   import system.dispatcher
-  import com.tally.cardrefresh.data.Implicits._
-
 
   val bus = busActor
   val userRegion = ClusterSharding(system). start(

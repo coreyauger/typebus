@@ -10,12 +10,15 @@ lazy val root =
   (project in file("."))
   .aggregate(`typebus`)
   .aggregate(`typebus-kafka`)
+  .aggregate(`typebus-squbs`)
   .aggregate(`telemetry`)
 
 
 val `typebus` = ProjectRef(file("typebus"), "typebus")
 
 val `typebus-kafka` = ProjectRef(file("typebus-kafka"), "typebus-kafka")
+
+val `typebus-squbs` = ProjectRef(file("typebus-squbs"), "typebus-squbs")
 
 val `telemetry` = ProjectRef(file("telemetry/server"), "telemetry")
 

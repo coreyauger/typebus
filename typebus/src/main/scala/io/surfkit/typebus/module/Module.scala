@@ -15,14 +15,14 @@ trait Module[UserBaseType] {
   var listOfPartials = List.empty[PartialFunction[_, Future[UserBaseType]]]
   var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[UserBaseType]]]
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
-  var listOfImplicitsReaders = Map.empty[String, ByteStreamReader[UserBaseType] ]
-  var listOfImplicitsWriters = Map.empty[String, ByteStreamWriter[UserBaseType] ]
-  var listOfFunctions = List.empty[(String, String)]
+  var listOfImplicitsReaders = Map.empty[EventType, ByteStreamReader[UserBaseType] ]
+  var listOfImplicitsWriters = Map.empty[EventType, ByteStreamWriter[UserBaseType] ]
+  var listOfFunctions = List.empty[(EventType, EventType)]
 
   var listOfServicePartialsWithMeta = List.empty[PartialFunction[_, Future[TypeBus]]]
-  var listOfServiceImplicitsReaders = Map.empty[String, ByteStreamReader[TypeBus] ]
-  var listOfServiceImplicitsWriters = Map.empty[String, ByteStreamWriter[TypeBus] ]
-  var listOfServiceFunctions = List.empty[(String, String)]
+  var listOfServiceImplicitsReaders = Map.empty[EventType, ByteStreamReader[TypeBus] ]
+  var listOfServiceImplicitsWriters = Map.empty[EventType, ByteStreamWriter[TypeBus] ]
+  var listOfServiceFunctions = List.empty[(EventType, EventType)]
 
   /***
     * op - internal method to register a partial function
@@ -34,8 +34,8 @@ trait Module[UserBaseType] {
     * @return - Unit
     */
   protected[this] def op[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
+    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
+    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartials = p :: listOfPartials
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
@@ -53,8 +53,8 @@ trait Module[UserBaseType] {
     * @return - Unit
     */
   protected[this] def op2[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
+    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
+    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
@@ -70,8 +70,8 @@ trait Module[UserBaseType] {
     * @return - Unit
     */
   protected[this] def op2Unit[T <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] )  = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    listOfFunctions = (topic, "scala.Unit") :: listOfFunctions
+    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
+    listOfFunctions = (topic, EventType.parse("scala.Unit")) :: listOfFunctions
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
     Unit
@@ -87,8 +87,8 @@ trait Module[UserBaseType] {
     * @return - Unit
     */
   protected[this] def op2Service[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
-    val topic = scala.reflect.classTag[T].runtimeClass.getCanonicalName
-    val returnType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
+    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
+    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfServiceFunctions = (topic, returnType) :: listOfServiceFunctions
     listOfServicePartialsWithMeta = p :: listOfServicePartialsWithMeta
     listOfServiceImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[TypeBus]])

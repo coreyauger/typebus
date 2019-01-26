@@ -34,8 +34,8 @@ object GatherActor{
   * @tparam T - The IN type for the service call
   * @tparam U - The OUT type in the service called. Wrapped as Future[U]
   */
-class GatherActor[T : ClassTag, U : ClassTag](producer: Publisher, timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]) extends Actor with ActorLogging with AvroByteStreams{
-  val system = context.system
+class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifier, producer: Publisher, timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]) extends Actor with ActorLogging with AvroByteStreams{
+  implicit val system = context.system
   import system.dispatcher
   
   val cluster = Cluster(context.system)
@@ -53,41 +53,26 @@ class GatherActor[T : ClassTag, U : ClassTag](producer: Publisher, timeout: Time
   def receive = {
     case msg: GatherActor.Request[T] =>
       replyTo = context.sender()
+      val meta =  EventMeta(
+        eventId = UUID.randomUUID().toString,
+        eventType = EventType.parse(msg.data.getClass.getCanonicalName),
+        source = clusterPath,
+        directReply = Some(clusterPath),
+        correlationId = Some(correlationId)
+      )
       try {
         log.debug(s"[GatherActor] publish ${msg.data}")
         val outEvent = PublishedEvent(
-          meta = EventMeta(
-            eventId = UUID.randomUUID().toString,
-            eventType = msg.data.getClass.getCanonicalName,
-            source = clusterPath,
-            directReply = Some(clusterPath),
-            correlationId = Some(correlationId)
-          ),
+          meta = meta,
           payload = writer.write(msg.data)
         )
         producer.publish(outEvent)
-        producer.traceEvent( { serviceId: ServiceIdentifier =>
+        producer.traceEvent(serviceIdentifier)( { serviceId: ServiceIdentifier =>
           OutEventTrace(serviceId.service, serviceId.serviceId, outEvent)
         }, outEvent.meta)
       }catch{
         case t:Exception =>
-          log.error(t, "Error trying to publish event.")
-          val sw = new StringWriter
-          t.printStackTrace(new PrintWriter(sw))
-          val ex = ServiceException(s"Error publishing event ${scala.reflect.classTag[T].runtimeClass.getName}", sw.toString.split("\n").toSeq)
-          val meta = EventMeta(
-            eventId = UUID.randomUUID().toString,
-            eventType = ex.getClass.getCanonicalName,
-            source = clusterPath,
-            directReply = Some(clusterPath),
-            correlationId = None
-          )
-          producer.traceEvent( { serviceId: ServiceIdentifier =>
-            ExceptionTrace(serviceId.service, serviceId.serviceId, PublishedEvent(
-              meta = meta,
-              payload = ServiceExceptionWriter.write(ex)
-            ))
-          }, meta)
+          producer.produceErrorReport(serviceIdentifier)(t,meta)
           cancel.cancel()
           context.stop(self)
       }
@@ -97,26 +82,12 @@ class GatherActor[T : ClassTag, U : ClassTag](producer: Publisher, timeout: Time
       try{
         val responsePayload = reader.read(x.payload)
         replyTo ! responsePayload
-        producer.traceEvent( { serviceId: ServiceIdentifier =>
+        producer.traceEvent(serviceIdentifier)( { serviceId: ServiceIdentifier =>
           InEventTrace(serviceId.service, serviceId.serviceId, x)
         }, x.meta)
       }catch{
         case t: Throwable =>
-          log.error(s"Gather failed to response with type ${scala.reflect.classTag[U].runtimeClass.getName}", t)
-          val sw = new StringWriter
-          t.printStackTrace(new PrintWriter(sw))
-          val ex = ServiceException(s"Gather failed to response with type ${scala.reflect.classTag[U].runtimeClass.getName}", sw.toString.split("\n").toSeq)
-          producer.traceEvent( { serviceId: ServiceIdentifier =>
-            ExceptionTrace(serviceId.service, serviceId.serviceId, PublishedEvent(
-              meta = x.meta.copy(
-                eventId = UUID.randomUUID.toString,
-                eventType = ex.getClass.getCanonicalName,
-                responseTo = Some(x.meta.eventId),
-                occurredAt = Instant.now()
-              ),
-              payload = ServiceExceptionWriter.write(ex)
-            ))
-          }, x.meta)
+          producer.produceErrorReport(serviceIdentifier)(t, x.meta)
       }finally {
         cancel.cancel()
         context.stop(self)

@@ -30,7 +30,6 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
 
   val cfg = ConfigFactory.load
   val kafka = cfg.getString("bus.kafka")
-  val trace = cfg.getBoolean("bus.trace")
 
   import collection.JavaConversions._
   val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
@@ -39,41 +38,11 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
   ))
 
-  def traceEvent( f:(ServiceIdentifier) => Trace, meta: EventMeta): Unit = {
-    if(  // CA - well this is lame :(
-      (trace || meta.trace) &&
-        !meta.eventType.endsWith(InEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.endsWith(OutEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.endsWith(ExceptionTrace.getClass.getSimpleName.replaceAllLiterally("$",""))
-    ){
-      val event = f(ServiceIdentifier(serviceName, serviceId))
-      producer.send(
-        new ProducerRecord[Array[Byte], Array[Byte]](
-          event.getClass.getCanonicalName,
-          service.publishedEventWriter.write(PublishedEvent(
-            meta = meta.copy(
-              eventId = UUID.randomUUID().toString,
-              eventType = event.getClass.getCanonicalName,
-              correlationId = None,
-              trace = false,
-              occurredAt = Instant.now
-            ),
-            payload = event match{
-              case x: OutEventTrace => service.OutEventTraceWriter.write(x)
-              case x: InEventTrace => service.InEventTraceWriter.write(x)
-              case x: ExceptionTrace => service.ExceptionTraceWriter.write(x)
-            }
-          ))
-        )
-      )
-    }
-  }
-
-  def publish(event: PublishedEvent): Unit = {
+  def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
       producer.send(
         new ProducerRecord[Array[Byte], Array[Byte]](
-          event.meta.eventType,
+          event.meta.eventType.fqn,
           service.publishedEventWriter.write(event)
         )
       )
@@ -81,9 +50,8 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
         OutEventTrace(s.service, s.serviceId, event)
       }, event.meta)
     }catch{
-      case e:Exception =>
-        e.printStackTrace()
-        // TODO: trace.. but how do we avoid getting stuck in a loop?
+      case t: Throwable =>
+        produceErrorReport(service.serviceIdentifier)(t, event.meta)
     }
   }
 
@@ -142,13 +110,13 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
           val publishedEvent = PublishedEvent(
             meta = x._2.meta.copy(
               eventId = UUID.randomUUID.toString,
-              eventType = x._3.getClass.getCanonicalName,
+              eventType = EventType.parse(x._3.getClass.getCanonicalName),
               responseTo = Some(x._2.meta.eventId),
               occurredAt = Instant.now()
             ),
-            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
+            payload = listOfServiceImplicitsWriters.get(EventType.parse(retType)).map{ writer =>
               writer.write(x._3.asInstanceOf[TypeBus])
-            }.getOrElse(listOfImplicitsWriters(retType).write(x._3.asInstanceOf[UserBaseType]))
+            }.getOrElse(listOfImplicitsWriters(EventType.parse(retType)).write(x._3.asInstanceOf[UserBaseType]))
           )
           x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
           publish(publishedEvent)
@@ -159,9 +127,9 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
-    system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1))}")
+    system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn))}")
 
-    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1) ::: listOfServiceFunctions.map(_._1)) :_*))
+    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn)) :_*))
       .mapAsyncUnordered(4) { msg =>
         system.log.info(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         val publish = service.publishedEventReader.read(msg.record.value())
@@ -172,25 +140,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
           consume(publish).map(x => (msg, publish, x))
         }catch{
           case t:Throwable =>
-            system.log.error(t.getMessage,t)
-            val sw = new StringWriter
-            t.printStackTrace(new PrintWriter(sw))
-            val ex = ServiceException(
-              message = t.getMessage,
-              stackTrace = sw.toString.split("\n").toSeq
-            )
-            traceEvent( { s: ServiceIdentifier =>
-              ExceptionTrace(s.service, s.serviceId, PublishedEvent(
-                meta = EventMeta(
-                  eventId = UUID.randomUUID().toString,
-                  source = "",
-                  eventType = ex.getClass.getCanonicalName,
-                  correlationId = None,
-                  trace = true
-                ),
-                payload = ServiceExceptionWriter.write(ex)
-              ))
-            }, publish.meta)
+            produceErrorReport(service.serviceIdentifier)(t, publish.meta)
             throw t
         }
       }

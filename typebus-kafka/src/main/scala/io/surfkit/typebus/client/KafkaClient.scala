@@ -3,7 +3,7 @@ package io.surfkit.typebus.client
 import java.io.{PrintWriter, StringWriter}
 import java.util.UUID
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.actors.GatherActor
@@ -27,7 +27,6 @@ class KafkaClient(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSy
   import system.dispatcher
 
   val cfg = ConfigFactory.load
-  val trace = cfg.getBoolean("bus.trace")
   val kafka = cfg.getString("bus.kafka")
 
   val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
@@ -36,45 +35,29 @@ class KafkaClient(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSy
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
   ))
 
-  def publish(event: PublishedEvent): Unit =
-    try {
-      system.log.info(s"[KafkaClient] publish ${event.meta.eventType}")
-      producer.send(
-        new ProducerRecord[Array[Byte], Array[Byte]](
-          event.meta.eventType,
-          publishedEventWriter.write(event)
-        )
-      )
-    }catch{
-      case e:Exception =>
-        system.log.error(e, "Error trying to publish event.")
-    }
+  val publishActor = system.actorOf(
+    Props(new Actor {
+      def receive = {
+        case event: PublishedEvent =>
+          try {
+            system.log.info(s"[KafkaClient] publish ${event.meta.eventType}")
+            producer.send(
+              new ProducerRecord[Array[Byte], Array[Byte]](
+                event.meta.eventType.fqn,
+                publishedEventWriter.write(event)
+              )
+            )
+          }catch{
+            case t: Throwable =>
+              produceErrorReport(serviceIdentifier)(t, event.meta)
+          }
+      }
+    }))
 
-  def traceEvent( f:(ServiceIdentifier) => Trace, meta: EventMeta): Unit = {
-    if(  // CA - well this is lame :(
-      (trace || meta.trace) &&
-        !meta.eventType.endsWith(InEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.endsWith(OutEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.endsWith(ExceptionTrace.getClass.getSimpleName.replaceAllLiterally("$",""))
-    ){
-      val event = f(serviceIdentifier)
-      publish(PublishedEvent(
-        meta = meta.copy(
-          eventId = UUID.randomUUID().toString,
-          eventType = event.getClass.getCanonicalName,
-          correlationId = None,
-          trace = false,
-          occurredAt = Instant.now
-        ),
-        payload = event match{
-          case x: OutEventTrace => OutEventTraceWriter.write(x)
-          case x: InEventTrace => InEventTraceWriter.write(x)
-          case x: ExceptionTrace => ExceptionTraceWriter.write(x)
-        }
-      ))
-    }
-  }
+  def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = publishActor ! event
 
+  def busActor(implicit system: ActorSystem): ActorRef =
+    publishActor
 
   /***
     * wire - function to create a Request per Actor and perform the needed type conversions.
@@ -87,32 +70,18 @@ class KafkaClient(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSy
     * @return - The Future[U] return from the service call.
     */
   def wire[T : ClassTag, U : ClassTag](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U] = {
-    val gather = system.actorOf(Props(new GatherActor[T, U](this, timeout, w, r)))
+    val tType = scala.reflect.classTag[T].runtimeClass.getCanonicalName
+    val uType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
+    val gather = system.actorOf(Props(new GatherActor[T, U](serviceIdentifier, this, timeout, w, r)))
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U]).recoverWith{
       case t: Throwable =>
-        val sw = new StringWriter
-        t.printStackTrace(new PrintWriter(sw))
-        val ex = ServiceException(
-          message = t.getMessage,
-          stackTrace = sw.toString.split("\n").toSeq
-        )
-        traceEvent( { serviceIdentifier: ServiceIdentifier =>
-          ExceptionTrace(serviceIdentifier.service, serviceIdentifier.serviceId, PublishedEvent(
-            meta = EventMeta(
-              eventId = UUID.randomUUID().toString,
-              source = "",
-              eventType = ex.getClass.getCanonicalName,
-              correlationId = None,
-              trace = true
-            ),
-            payload = ServiceExceptionWriter.write(ex)))
-        }, EventMeta(
+        produceErrorReport(serviceIdentifier)(t, EventMeta(
           eventId = UUID.randomUUID().toString,
-          eventType = x.getClass.getCanonicalName,
+          eventType = EventType.parse(x.getClass.getCanonicalName),
           source = "",
           directReply = None,
           correlationId = None
-        ))
+        ), s"FAILED RPC call ${tType} => Future[${uType}] failed with exception '${t.getMessage}'")
         Future.failed(t)
     }
   }

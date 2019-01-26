@@ -28,7 +28,6 @@ class AkkaClient(service: ServiceIdentifier)(implicit system: ActorSystem) exten
   import system.dispatcher
 
   val cfg = ConfigFactory.load
-  val trace = cfg.getBoolean("bus.trace")
   val tyebusMap = scala.collection.mutable.Map.empty[String, ActorRef]
 
   val mediator = DistributedPubSub(system).mediator
@@ -41,33 +40,7 @@ class AkkaClient(service: ServiceIdentifier)(implicit system: ActorSystem) exten
       }
     }))
 
-
-  def traceEvent( f:(ServiceIdentifier) => Trace, meta: EventMeta): Unit = {
-    if(  // CA - well this is lame :(
-      (trace || meta.trace) &&
-        !meta.eventType.fqn.endsWith(InEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.fqn.endsWith(OutEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
-        !meta.eventType.fqn.endsWith(ExceptionTrace.getClass.getSimpleName.replaceAllLiterally("$",""))
-    ){
-      val event = f(service)
-      publishActor ! PublishedEvent(
-        meta = meta.copy(
-          eventId = UUID.randomUUID().toString,
-          eventType = event.getClass.getCanonicalName,
-          correlationId = None,
-          trace = false,
-          occurredAt = DateTime.now
-        ),
-        payload = event match{
-          case x: OutEventTrace => OutEventTraceWriter.write(x)
-          case x: InEventTrace => InEventTraceWriter.write(x)
-          case x: ExceptionTrace => ExceptionTraceWriter.write(x)
-        }
-      )
-    }
-  }
-
-  def publish(event: PublishedEvent): Unit =
+  def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit =
     try {
       system.log.info(s"[KinesisClient] publish ${event.meta.eventType}")
       publishActor ! event
@@ -76,6 +49,8 @@ class AkkaClient(service: ServiceIdentifier)(implicit system: ActorSystem) exten
         system.log.error(e, "Error trying to publish event.")
     }
 
+  def busActor(implicit system: ActorSystem): ActorRef =
+    publishActor
 
   /***
     * wire - function to create a Request per Actor and perform the needed type conversions.
@@ -90,32 +65,16 @@ class AkkaClient(service: ServiceIdentifier)(implicit system: ActorSystem) exten
   def wire[T : ClassTag, U : ClassTag](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U] = {
     val tType = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     val uType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
-    val gather = system.actorOf(Props(new GatherActor[T, U](this, timeout, w, r)))
+    val gather = system.actorOf(Props(new GatherActor[T, U](service, this, timeout, w, r)))
     (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U]).recoverWith{
       case t: Throwable =>
-        val sw = new StringWriter
-        t.printStackTrace(new PrintWriter(sw))
-        val ex = ServiceException(
-          message = s"FAILED RPC call ${tType} => Future[${uType}] failed with exception '${t.getMessage}'",
-          stackTrace = sw.toString.split("\n").toSeq
-        )
-        traceEvent( { serviceIdentifier: ServiceIdentifier =>
-          ExceptionTrace(serviceIdentifier.service, serviceIdentifier.serviceId, PublishedEvent(
-            meta = EventMeta(
-              eventId = UUID.randomUUID().toString,
-              source = "",
-              eventType = ex.getClass.getCanonicalName,
-              correlationId = None,
-              trace = true
-            ),
-            payload = ServiceExceptionWriter.write(ex)))
-        }, EventMeta(
+        produceErrorReport(service)(t, EventMeta(
           eventId = UUID.randomUUID().toString,
-          eventType = x.getClass.getCanonicalName,
+          eventType = EventType.parse(x.getClass.getCanonicalName),
           source = "",
           directReply = None,
           correlationId = None
-        ))
+        ), s"FAILED RPC call ${tType} => Future[${uType}] failed with exception '${t.getMessage}'")
         Future.failed(t)
     }
   }

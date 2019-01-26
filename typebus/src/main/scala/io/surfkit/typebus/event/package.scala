@@ -36,9 +36,9 @@ package object event {
                ) extends Trace
 
   /***
-    *  EventType - wrap the Fully Qualified Name of a type
+    *  DtoType - wrap the Fully Qualified Name of a type
     */
-  trait EventType{
+  trait DtoType{
     /***
       * fqn - Fully Qualified Name
       * @return - return the fully qualified name of a type.
@@ -46,27 +46,33 @@ package object event {
     def fqn: String
   }
 
+  case class EventType(fqn: String) extends DtoType
+  object EventType{
+    def parse(et: String): EventType =
+      if( et.startsWith("api.") ) EventType(et.replaceFirst("api.", ""))
+      else EventType(et)
+  }
 
   /***
     * InType - This is the type passed IN to a service method
     * @param fqn - Fully Qualified Name of Type
     * @param schema - The Avro(or other) Schema
     */
-  case class InType(fqn: String) extends EventType
+  case class InType(fqn: String) extends DtoType
 
   /***
     * OutType - This is the type passed OUT of a service function
     * @param fqn - Fully Qualified Name of Type
     * @param schema - The Avro(or other) Schema
     */
-  case class OutType(fqn: String) extends EventType
+  case class OutType(fqn: String) extends DtoType
 
   /***
     * Store the Fqn and the schema for the type.  The fqn can serve as a lookup for that types schema
     * @param fqn - Fully Qualified Name of Type
     * @param schema - The Avro(or other) Schema
     */
-  case class TypeSchema(fqn: String, schema: String) extends TypeBus
+  case class TypeSchema(`type`: EventType, schema: String) extends TypeBus
 
   /***
     * ServiceMethod - a mapping from In to Future[Out]
@@ -109,7 +115,7 @@ package object event {
     * @param extra - additional developer generated meta
     */
   case class EventMeta(eventId: String,
-                       eventType: String,
+                       eventType: EventType,
                        source: String,
                        correlationId: Option[String],
                        trace: Boolean = false,

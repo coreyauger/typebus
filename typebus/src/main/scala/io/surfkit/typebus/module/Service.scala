@@ -15,11 +15,11 @@ import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 object Service{
-  val registry = scala.collection.mutable.HashMap.empty[String, String]
+  val registry = scala.collection.mutable.HashMap.empty[ EventType, String]
 
   def registerServiceType(serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
     // CA - pretty cheesy data store.
-    registry += fqn -> serviceType.schema
+    registry += EventType.parse(fqn) -> serviceType.schema
   }
 }
 
@@ -94,7 +94,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     val publishedEvent = PublishedEvent(
       meta = meta.copy(
         eventId = UUID.randomUUID.toString,
-        eventType = x.getClass.getCanonicalName,
+        eventType = EventType.parse(x.getClass.getCanonicalName),
         responseTo = Some(meta.eventId)
       ),
       payload = writer.write(x))
@@ -105,16 +105,16 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     service = serviceName,
     serviceId = serviceId,
     upTime = upTime,
-    serviceMethods = listOfFunctions.filterNot(_._2 == "scala.Unit").map{
+    serviceMethods = listOfFunctions.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>
         val reader = listOfImplicitsReaders(in)
         val writer = listOfImplicitsWriters(out)
         Service.registry += in -> reader.schema
         Service.registry += out -> writer.schema
-        ServiceMethod(InType(in), OutType(out))
+        ServiceMethod(InType(in.fqn), OutType(out.fqn))
     },
     types = Service.registry.map{
-      case (fqn, schema) => fqn -> TypeSchema(fqn, schema)
+      case (fqn, schema) => fqn.fqn -> TypeSchema(fqn, schema)
     }.toMap
   )
 }

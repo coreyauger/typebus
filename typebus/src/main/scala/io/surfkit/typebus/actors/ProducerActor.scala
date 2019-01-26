@@ -16,10 +16,10 @@ class ProducerActor(producer: Publisher) extends Actor with ActorLogging with Av
     case x:PublishedEvent =>
       try {
         log.info(s"[ProducerActor] publish ${x.meta.eventType}")
-        producer.publish(x)
+        producer.publish(x)(context.system)
       }catch{
-        case e:Exception =>
-          log.error(e, "Error trying to publish event.")
+        case t: Throwable =>
+          log.error(t, "Error trying to publish event.")
       }
 
     case _ =>

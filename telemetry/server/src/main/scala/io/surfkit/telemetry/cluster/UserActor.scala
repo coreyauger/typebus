@@ -27,7 +27,7 @@ object UserActor extends io.surfkit.typebus.cluster.Actor.ActorSharding{
 }
 
 
-class UserActor(bus: ActorRef) extends PersistentActor with ActorLogging with Serializable {
+class UserActor(bus: ActorRef) extends Actor with ActorLogging with Serializable {
   implicit val system = context.system
   import system.dispatcher
   import ShardRegion.Passivate
@@ -41,16 +41,10 @@ class UserActor(bus: ActorRef) extends PersistentActor with ActorLogging with Se
   var numMessages = 0
   lazy val cluster = Cluster(context.system)
 
-  override def persistenceId: String = "UserActor"
   def clusterPath = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}"
 
   // PersistentActor
-  override def receiveCommand: Receive = initial
-  override def receiveRecover: Receive = {
-    case SnapshotOffer(_, snapshot: Any) => // TODO:
-    //case event: SomeType => // TODO:
-    case _ =>
-  }
+  override def receive: Receive = initial
 
   // actor should passivate after 20 min of no messages
   // https://doc.akka.io/docs/akka/2.5/java/cluster-sharding.html#passivation

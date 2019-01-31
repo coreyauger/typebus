@@ -106,7 +106,8 @@ trait AkkaBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams with 
         }
       }catch{
         case t:Throwable =>
-          produceErrorReport(t, event.meta, "typebus akka bus error")
+          val error = s"Error consuming event: ${publish.meta.eventType}\n${t.getMessage}"
+          produceErrorReport(t, event.meta, error)
       }
   }
 }

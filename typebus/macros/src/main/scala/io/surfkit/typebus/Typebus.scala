@@ -145,7 +145,7 @@ object Typebus{
 
   def declareType_impl[Z: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context) = {
     import c.universe._
-
+    println("HELLO")
     val tpe = weakTypeOf[Z]
     val symbol = weakTypeOf[Z].typeSymbol
 
@@ -183,6 +183,8 @@ object Typebus{
         }
     }
     val rootNode = termTree(tpe).asInstanceOf[Node]
+    println(s"rootNode: ${rootNode}")
+
 
     //println(s"members: ${tpe.members}")
     val rootScope = scoped(rootNode, "")

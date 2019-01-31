@@ -140,7 +140,8 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
           consume(publish).map(x => (msg, publish, x))
         }catch{
           case t:Throwable =>
-            produceErrorReport(service.serviceIdentifier)(t, publish.meta)
+            val error = s"Error consuming event: ${publish.meta.eventType}\n${t.getMessage}"
+            produceErrorReport(service.serviceIdentifier)(t, publish.meta, error)
             throw t
         }
       }

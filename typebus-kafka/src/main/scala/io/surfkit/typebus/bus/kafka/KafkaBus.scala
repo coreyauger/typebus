@@ -28,15 +28,23 @@ import org.joda.time.DateTime
 trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
   service: Service[UserBaseType] =>
 
-  val cfg = ConfigFactory.load
-  val kafka = cfg.getString("bus.kafka")
-
   import collection.JavaConversions._
+
+  val cfg = ConfigFactory.load
+  val kafkaConfig: com.typesafe.config.ConfigObject = cfg.getObject("bus.kafka")
+  val kafkaConfigMap = (for {
+    entry : java.util.Map.Entry[String, com.typesafe.config.ConfigValue] <- kafkaConfig.entrySet()
+    key = entry.getKey.replaceAll("-",".")
+    value = entry.getValue.unwrapped().toString
+  } yield (key, value)).toMap
+
+  println(s"\n\nRARG:\n${kafkaConfigMap}\n\n")
+
   val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
-    "bootstrap.servers" -> kafka,
+    //"bootstrap.servers" -> kafka,
     "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
-  ))
+  ) ++ kafkaConfigMap )
 
   def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
@@ -71,7 +79,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
          | kka.remote.netty.tcp.hostname                    ${cfg.getString("akka.remote.netty.tcp.hostname")}
          | akka.remote.netty.tcp.port                       ${cfg.getString("akka.remote.netty.tcp.port")}
          | akka.cluster.roles                               ${cfg.getStringList("akka.cluster.roles")}
-         | bus.kafka                                        ${cfg.getString("bus.kafka")}
+         | bus.kafka                                        ${kafkaConfigMap}
          | bus.trace                                        ${cfg.getBoolean("bus.trace")}
          |********************************************************************************************************
     """.stripMargin)
@@ -82,7 +90,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
     implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
     val consumerSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
-      .withBootstrapServers(kafka)
+      .withProperties(kafkaConfigMap)
       .withGroupId(serviceName)
       .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 

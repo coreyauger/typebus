@@ -22,18 +22,23 @@ import scala.reflect.ClassTag
   */
 class KafkaClient(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends Client with Publisher with AvroByteStreams{
   import akka.pattern.ask
-  import collection.JavaConversions._
   import akka.util.Timeout
   import system.dispatcher
+  import collection.JavaConversions._
 
   val cfg = ConfigFactory.load
-  val kafka = cfg.getString("bus.kafka")
+  val kafkaConfig: com.typesafe.config.ConfigObject = cfg.getObject("bus.kafka")
+  val kafkaConfigMap = (for {
+    entry : java.util.Map.Entry[String, com.typesafe.config.ConfigValue] <- kafkaConfig.entrySet()
+    key = entry.getKey.replaceAll("-",".")
+    value = entry.getValue.unwrapped().toString
+  } yield (key, value)).toMap
 
   val producer = new KafkaProducer[Array[Byte], Array[Byte]](Map(
-    "bootstrap.servers" -> kafka,
+    //"bootstrap.servers" -> kafka,
     "key.serializer" ->  "org.apache.kafka.common.serialization.ByteArraySerializer",
     "value.serializer" -> "org.apache.kafka.common.serialization.ByteArraySerializer"
-  ))
+  ) ++ kafkaConfigMap )
 
   val publishActor = system.actorOf(
     Props(new Actor {

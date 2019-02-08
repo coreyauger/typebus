@@ -11,7 +11,7 @@ import io.surfkit.typebus.cli.CommandParser.Cmd
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import io.surfkit.typebus.cli._
-
+import io.surfkit.typebus._
 import scala.reflect.runtime.universe
 import scala.tools.reflect.ToolBox
 
@@ -43,16 +43,24 @@ object Main extends App {
     println("cli read: " + line)
     CommandParser.parse(line.split(' ')).foreach{
       case cmd if cmd.command == Cmd.CodeGen =>
-        val gen = cmd.gen
-        if(gen.service != ""){
+        val genCmd = cmd.gen
+        if(genCmd.service != ""){
           ZookeeperClusterSeed(system).join()
           new GeneratorService
-        }else if(gen.push){
+        }else if(genCmd.push){
           // get the project to push to
           println("push code gen...")
-          Typebus.selfCodeGen
+          val generated = Typebus.selfCodeGen
+          genCmd.out.foreach { outFile =>
+            gen.ScalaCodeWriter.writeCodeToFiles("Kafka", generated, outFile.getAbsolutePath.split('/').toList )
+          }
+        }else if(!genCmd.target.isEmpty){
+          val target = genCmd.target.get
+          val generated = Typebus.codeGen(target.toPath)
+          genCmd.out.foreach { outFile =>
+            gen.ScalaCodeWriter.writeCodeToFiles("Kafka", generated, outFile.getAbsolutePath.split('/').toList )
+          }
         }
-        // TODO..
 
 
       case cmd =>

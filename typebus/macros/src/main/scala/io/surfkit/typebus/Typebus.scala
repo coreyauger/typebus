@@ -460,7 +460,7 @@ object Typebus{
                 fqn = gen.Fqn(code.`type`),
                 packageName = pack,
                 simpleName = typeToken,
-                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
+                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"      def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
             case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
               val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
                 val y = yy._2
@@ -477,7 +477,7 @@ object Typebus{
                 fqn = gen.Fqn(code.`type`),
                 packageName = pack,
                 simpleName = typeToken,
-                classRep =s"   object ${typeToken}${inheritenceStr}{\n${inner.mkString}\n}"))
+                classRep =s"   object ${typeToken}${inheritenceStr}{\n${inner.mkString}\n   }"))
             case _ => None
           }
         }
@@ -504,14 +504,15 @@ object Typebus{
     println("\nSRC:\n\n")
     fileSystem.close()
 
-    println(gen.ScalaCodeWriter.writeService("kafka", gen.ServiceGenerator(
+    val serviceGenerator = gen.ServiceGenerator(
       "service-name",
       gen.Language.Scala,
       methods = Seq.empty,
       classes = generated.flatMap(_._2).toSet
-    )))
+    )
+    println(serviceGenerator)
 
-    generated.flatMap(_._2)
+    serviceGenerator
   }
 
   /***
@@ -519,18 +520,16 @@ object Typebus{
     * @param value Node that we want to write
     * @return - bytes
     */
-  def serialise(value: Node): Array[Byte] = {
+  def serialise(value: Node): Array[Byte] =
     Pickle.intoBytes(value).array
-  }
 
   /***
     * Read an AST Node type from an array of bytes.  Used fore reading from our DB
     * @param bytes
     * @return
     */
-  def deSerialise(bytes: Array[Byte]): Node = {
+  def deSerialise(bytes: Array[Byte]): Node =
     Unpickle[Node].fromBytes(java.nio.ByteBuffer.wrap(bytes))
-  }
 
   /***
     * Given 2 Nodes we want to merge them into a final single Node

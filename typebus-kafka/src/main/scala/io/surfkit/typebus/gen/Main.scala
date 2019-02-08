@@ -12,8 +12,6 @@ import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import io.surfkit.typebus.cli._
 import io.surfkit.typebus._
-import scala.reflect.runtime.universe
-import scala.tools.reflect.ToolBox
 
 /***
   * Cli

@@ -485,10 +485,12 @@ object Typebus{
   }
 
   def codeGen(database: Path) = {
+    println(s"path: ${database}")
     if(Files.isDirectory(database)) {
       val typebusDb =
-          if (database.endsWith("/typebus"))database
-          else database.resolveSibling(Paths.get("src/main/resources/typebus/"))
+          if (database.endsWith("typebus"))database
+          else database.resolve(Paths.get("src/main/resources/typebus/"))
+      println(s"resolved: ${typebusDb}")
       if(Files.isDirectory(typebusDb)) {
         val walk = Files.walk(typebusDb, 1)
         var astTree = List.empty[Node]
@@ -499,7 +501,7 @@ object Typebus{
         }
         astNodeToServiceGenerator(astTree)
       }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
-    }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
+    }else throw new FileNotFoundException(s"Not a directory: ${database}")
 
   }
 

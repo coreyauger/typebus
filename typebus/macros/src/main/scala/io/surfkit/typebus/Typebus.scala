@@ -87,6 +87,7 @@ object Typebus{
     case object CaseClass extends Symbol
     case object Trait extends Symbol
     case object Companion extends Symbol
+    case object CompanionCaseClass extends Symbol
   }
 
   /***
@@ -289,7 +290,7 @@ object Typebus{
           //println(s"[${symbol.fullName}] BASE CLASSES: ${t.baseClasses.map(x => t.baseType(x))}")
           val params = constr.asMethod.paramLists.head //println(s"a.paramss: ${params}")
           Node(
-            symbol = Symbol.CaseClass,
+            symbol = if(exploreCompanion) Symbol.CaseClass else Symbol.CompanionCaseClass,
             `type` = symbol.fullName,
             members = params.zipWithIndex.map {
               case (x,i) =>
@@ -410,35 +411,7 @@ object Typebus{
     }
   }
 
-  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Seq[String]){
-    def toSrcCode = {
-      val typeToken = `type`.split('.').last
-      val inheritenceStr = baseClasses.mkString(" extends "," with ","")
-      symbol match{
-        case Symbol.CaseClass if members.isEmpty =>
-          s"""
-            |final case object ${typeToken}${inheritenceStr}
-          """.stripMargin
-        case Symbol.CaseClass =>
-          s"""
-            |final case class ${typeToken}(${members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}
-          """.stripMargin
-        case Symbol.Trait =>
-          s"""
-            |sealed trait ${typeToken}${inheritenceStr}{
-            |${members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\t","\n\t","\t")}
-            |}
-          """.stripMargin
-        case Symbol.Companion =>
-          s"""
-            |object ${typeToken}${inheritenceStr}{
-            |
-            |}
-          """.stripMargin
-        case _ => ""
-      }
-    }
-  }
+  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Set[String])
 
   def tree2CodeSrc(trees: Seq[Node]): List[(String, CodeSrc)] = {
     def shortName(name: String) = name.split('.').last
@@ -451,20 +424,64 @@ object Typebus{
         case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
       }.map(x => (x._1 -> x._2, x._3) ).unzip
 
-      CodeSrc(n.symbol, n.`type`, members.toMap, n.baseClasses.map(_.`type`)) ::  n.baseClasses
+      CodeSrc(n.symbol, n.`type`, members.toMap, n.baseClasses.map(_.`type`).toSet) ::  n.baseClasses
           .filterNot(x => supportedBaseTypes.contains(x.`type`))
           .toList.asInstanceOf[List[Node]].map(collapseNode).flatten ::: nodes.toList.flatten.map(collapseNode).flatten ::: n.companion.map(collapseNode).getOrElse(List.empty[CodeSrc])
     }
     // want to collect all the Node types
     // sort them.. this should collect all the namespaces together
-    trees.map(collapseNode).flatten.map( x => (x.`type` +"-"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
+    trees.map(collapseNode).flatten.map( x => (x.`type` +"|"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
   }
 
   def srcCodeWriter(codes: List[(String, CodeSrc)]) = {
-    codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString(".")).map{
+    val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
+    grouped.map{
       case (pack, codeSrc) =>
-        pack -> codeSrc.map(_._2).map(_.toSrcCode)
-    }
+        pack -> codeSrc.map(_._2).flatMap{ code =>
+          val typeToken = code.`type`.split('.').last
+          val inheritenceStr =
+            if(code.baseClasses.isEmpty) ""
+            else code.baseClasses.mkString(" extends "," with ","")
+          code.symbol match{
+            case Symbol.CaseClass if code.members.isEmpty =>
+              Some(s"""
+                 |final case object ${typeToken}${inheritenceStr}
+              """.stripMargin)
+            case Symbol.CaseClass =>
+              Some(s"""
+                 |final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}
+              """.stripMargin)
+            case Symbol.Trait =>
+              Some(s"""
+                 |sealed trait ${typeToken}${inheritenceStr}{
+                 |${code.members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\t","\n\t","\t")}
+                 |}
+              """.stripMargin)
+            case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
+              val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
+                val y = yy._2
+                val tt = y.`type`.split('.').last
+                val inheritenceStr2 =
+                  if(y.baseClasses.isEmpty) ""
+                  else y.baseClasses.mkString(" extends "," with ","")
+                if(y.members.isEmpty)
+                  s"""
+                     |  final case object ${tt}${inheritenceStr2}
+                """.stripMargin
+                else
+                s"""
+                   |  final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}
+                """.stripMargin
+              }
+              Some(s"""
+                 |object ${typeToken}${inheritenceStr}{
+                 |${inner.mkString}
+                 |}
+              """.stripMargin)
+            case _ => None
+          }
+        }
+    }.filterNot(_._2.isEmpty)
   }
 
   def selfCodeGen = {

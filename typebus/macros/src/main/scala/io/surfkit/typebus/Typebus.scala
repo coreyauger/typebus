@@ -1,8 +1,12 @@
 package io.surfkit.typebus
 
-import java.nio.file.{Files, Paths}
+import java.nio.file.{FileSystems, Files, Paths}
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.util.stream.Collectors
+
 import boopickle.Default._
+
+import scala.collection.mutable
 
 /***
   * Schemacha - cheeky name for Schema wrapper
@@ -70,7 +74,7 @@ object Typebus{
     * @param term - The AST type for the propery
     * @param hasDefault - if there as a default value provided or not.
     */
-  case class Property(term: Term, hasDefault: Boolean)
+  case class Property(term: Term, hasDefault: Boolean, defaultValue: Option[String] = None)
 
   /***
     * Terminator Node that contains a Type
@@ -78,12 +82,20 @@ object Typebus{
     */
   case class Leaf(`type`: String) extends Term
 
+  sealed trait Symbol
+  object Symbol{
+    case object CaseClass extends Symbol
+    case object Trait extends Symbol
+    case object Companion extends Symbol
+  }
+
   /***
     * This is a Complext type (class, case class)
     * @param `type` - the type of the case class
     * @param members - all the members declared in the case class (mapping of "name" -> Property)
     */
-  case class Node(`type`: String, members: Map[String, Property]) extends Term
+  case class Node(symbol: Symbol, `type`: String, members: Map[String, Property], baseClasses: Seq[Term], companion: Option[Node]) extends Term
+
 
   /***
     * Type containers with a single Type parameter, eg: Option, Seq, ...
@@ -99,6 +111,8 @@ object Typebus{
     * @param right - right "contained" type
     */
   case class BiContainer(`type`: String, left: Term, right: Term) extends Term
+
+  /*****************************************************************************************************************/
 
   /***
     * Helper class to "flatten" and object into scoped paths
@@ -126,10 +140,18 @@ object Typebus{
     "java.lang.Char",
     "BigDecimal",
     "java.math.BigDecimal",
-    "org.joda.time.DateTime",
-    "org.joda.time.LocalDate",
-    "java.util.UUID"
-  )
+    "java.time.Instant",
+    "java.util.UUID",
+    "Serializable",
+    "java.io.Serializable",
+    "scala.Serializable",
+    "scala.Product",
+    "scala.Equals",
+    "java.lang.Object",
+    "scala.Object",
+    "scala.Any"
+
+  ) // TODO: add the ability to pass in items to add to this Set
 
   val supportedContainerTypes = Set(
     "Set",
@@ -141,17 +163,55 @@ object Typebus{
     "Map"
   )
 
+  val startBraces = Set('(','[','{')
+  val endBraces = Set(')',']','}')
+
+
   def declareType[T, R <: ByteStreamReader[T], W <: ByteStreamWriter[T]] = macro declareType_impl[T, R, W]
 
   def declareType_impl[Z: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context) = {
     import c.universe._
-    println("HELLO")
     val tpe = weakTypeOf[Z]
     val symbol = weakTypeOf[Z].typeSymbol
 
-    def termTree(t: c.universe.Type): Term = {
+    def extractDefaultParam(src: String, caseClass: String, symbol:  c.universe.Symbol): String = {
+      val cc = caseClass.split('.').last
+      val prop = symbol.fullName.split('.').last
+      val start= s"(?s)case\\s+class\\s+${cc}\\s*".r.findFirstMatchIn(src).map(_.start).get
+      //println(s"start: ${start}")
+      val strRest = src.substring(start)
+      val s = strRest.substring(strRest.indexOf('(')+1)
+      //println(s"s: ${s.take(20)}")
+      val parms = s.foldLeft( (0, List.empty[Char]) ){ case ((par, str), ch) =>
+        if(par < 0) (par, str)
+        else if(ch == ')' && par == 0)(-1, str)  // don't include the last ')'
+        else (if(ch == '(') par+1 else if(ch == ')' ) par-1 else par, ch :: str)
+      }._2.mkString.reverse.replaceAll("\\n", "")
+      //println(s"\nmatches: ${parms}")
+      val located = parms.foldLeft[(Int, Int, Int, Boolean, List[String])]( (0, 0, 0, false, List.empty[String]) ){ case ((start, pos, braceCount, inLiteral, xs: List[String]), ch) =>
+        //print(ch)
+        if(ch == ',' && braceCount == 0 && !inLiteral){
+          (pos+1, pos+1, braceCount, inLiteral, parms.substring(start, pos) :: xs)
+        }else if(pos == parms.length-1){
+          (pos+1, pos+1, braceCount, inLiteral, parms.substring(start) :: xs)
+        }else{
+          (start, pos+1, if(startBraces.contains(ch))braceCount+1 else if(endBraces.contains(ch))braceCount-1 else braceCount, if(ch == '"') !inLiteral else inLiteral,  xs)
+        }
+      }._5.map(_.trim)
+      //println(s"\nlocated: ${located}")
+      //println(s"prop: ${prop}")
+      located.filter(_.trim.startsWith(prop)).headOption match{
+        case Some(eq) if eq.contains('=') => eq.split('=').last.trim
+        case _ => c.abort(c.enclosingPosition, s"Could not parse default value for type: ${cc}.${prop}")
+      }
+    }
+
+
+
+
+    def termTree(t: c.universe.Type, exploreCompanion: Boolean = true): Term = {
       //println(s"t: ${t}")
-      val symbol = t.typeSymbol //; println(s"symbol: ${symbol}")
+      val symbol = t.typeSymbol ; //println(s"identify symbol: ${symbol}")
       if( supportedContainerTypes.map(_+"[").exists(t.toString.startsWith) ){
         t match{
           case TypeRef(_, _, args) if args.size == 1 =>
@@ -160,31 +220,107 @@ object Typebus{
           case TypeRef(_, _, args) if args.size == 2 =>
             val tType = args.head
             val uType = args.drop(1).head
-            BiContainer(symbol.fullName, termTree(tType), termTree(uType))
+            BiContainer(symbol.fullName, termTree(tType, exploreCompanion), termTree(uType, exploreCompanion))
         }
+      }else if(supportedBaseTypes.contains(symbol.fullName)) {
+        Leaf(symbol.fullName)
       } else if(symbol.asClass.isTrait){
-        Leaf(symbol.fullName)
-      }else if(supportedBaseTypes.contains(symbol.fullName)){
-        Leaf(symbol.fullName)
-      }
-      else{
-        val constr: MethodSymbol = t.members.find {
-          case constr: MethodSymbol if constr.isConstructor => true
-          case _ => false
-        }.get.asInstanceOf[MethodSymbol]
-        val params = constr.asMethod.paramLists.head   //println(s"a.paramss: ${params}")
-        Node(symbol.fullName,
-          params.map {
+        //println(s"Trait: ${symbol.fullName}")
+        //println(s"t: ${t}")
+        val methods = try {
+          t.members.filter {
+            case x: MethodSymbol if x.isAbstract => true
+            case _ => false
+          }.toSeq.asInstanceOf[Seq[MethodSymbol]]
+        }catch{
+          case _: Throwable => Seq.empty[MethodSymbol]
+        }
+        val baseClasses = try{
+          t.baseClasses.map(x => t.baseType(x)).filterNot(_ == t)
+            .filterNot(x => supportedBaseTypes.contains(x.typeSymbol.fullName))
+            .map(termTree(_,exploreCompanion))
+        }catch{
+          case _: Throwable => Seq.empty[Term]
+        }
+        //println(s"methods: ${methods}")
+        //println(s"baseClasses: ${baseClasses}")
+        //println(s"[${symbol.fullName}] BASE CLASSES: ${t.baseClasses.map(x => t.baseType(x))}")
+       // println(s"Companion: ${t.companion}")
+        val comp = if(t.companion != NoType && exploreCompanion){
+            val c = Node(
+              symbol = Symbol.Companion,
+              `type` = t.companion.typeSymbol.fullName,
+              members = t.companion.members.filter {
+                case x: TermSymbol if x.toString.startsWith("object") => true
+                case _ => false
+              }.map {
+                case x =>
+                  //val dataType = x.info.toString  //println(s"dataType: ${dataType}")
+                  //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
+                  (x.fullName -> Property(termTree(x.info, false), x.asTerm.isParamWithDefault) )
+              }.toMap,
+              baseClasses = Seq.empty[Term],
+              companion = None
+            )
+            Some(c)
+          } else None
+
+        Node(
+          symbol = Symbol.Trait,
+          `type` = symbol.fullName,
+          members = methods.map {
             case x =>
               val dataType = x.info.toString  //println(s"dataType: ${dataType}")
               //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
-              (x.fullName -> Property(termTree(x.info), x.asTerm.isParamWithDefault) )
-          }.toMap)
+              (x.fullName -> Property(termTree(x.info, exploreCompanion), x.asTerm.isParamWithDefault) )
+          }.toMap,
+          baseClasses = baseClasses,
+          companion = comp
+        )
+      }else {
+        val constrOpt: Option[MethodSymbol] = t.members.find {
+          case x: MethodSymbol if x.isConstructor => true
+          case _ => false
+        }.headOption.asInstanceOf[Option[MethodSymbol]]
+        if (constrOpt.isEmpty) {
+          Leaf(symbol.fullName)
+        } else {
+          val constr = constrOpt.get
+          //println(s"[${symbol.fullName}] BASE CLASSES: ${t.baseClasses.map(x => t.baseType(x))}")
+          val params = constr.asMethod.paramLists.head //println(s"a.paramss: ${params}")
+          Node(
+            symbol = Symbol.CaseClass,
+            `type` = symbol.fullName,
+            members = params.zipWithIndex.map {
+              case (x,i) =>
+                val dataType = x.info.toString //println(s"dataType: ${dataType}")
+                val defaultValueOpt = if(x.asTerm.isParamWithDefault){
+                  //val defaultName = x.fullName.split('.').last+"$default$"+(i+1)
+                  val moduleSym = symbol.companion
+
+                  val defaultName = symbol.fullName+".apply$default$"+(i+1)
+                  moduleSym.typeSignature.members.collect{
+                    case _ => // CA - this seems required to expand the method names  (need to collect them?)
+                  }
+                  val defaultExprOpt = moduleSym.typeSignature.members.find(_.fullName == defaultName)
+                  //println(s"defaultExprOpt: ${defaultExprOpt}")
+                  defaultExprOpt.map{ exp =>
+                    val src = c.enclosingPosition.source.content.mkString("")
+                    extractDefaultParam(src, symbol.fullName, x)
+                  }
+                }else None
+                //println(s"defaultValueOpt: ${defaultValueOpt}")
+                //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
+                (x.fullName -> Property(termTree(x.info, exploreCompanion), x.asTerm.isParamWithDefault, defaultValueOpt))
+            }.toMap,
+            baseClasses = t.baseClasses.map(x => t.baseType(x)).filterNot(_ == t).map(termTree(_, exploreCompanion)).filterNot(x => supportedBaseTypes.contains(x.`type`)),
+            companion = None // if(t.companion == NoType) None else Some(termTree(t.companion))
+          )
         }
+      }
     }
     val rootNode = termTree(tpe).asInstanceOf[Node]
     println(s"rootNode: ${rootNode}")
-
 
     //println(s"members: ${tpe.members}")
     val rootScope = scoped(rootNode, "")
@@ -226,16 +362,12 @@ object Typebus{
       case _ => None
     }}.toMap
 
-    val typeCheck = subsTypeMap.keys.flatMap{ k =>
-      addsTypeMap.get(k).map{ t =>
-        k -> (subsTypeMap(k),t)
-      }
-    }
+    val typeCheck = subsTypeMap.keys.flatMap{ k => addsTypeMap.get(k).map{ t => k -> (subsTypeMap(k),t) } }
 
     if(! typeCheck.isEmpty && !typeCheck.forall{ case (k, (t1, t2)) => t1 == t2 } ){ // changing the type of a field
       c.abort(c.enclosingPosition,
         s"""
-           |Schema evolution Faild !!
+           |Schema evolution Failed !!
            |You changed the type of one of you member fields
            |Type failed:
            |${typeCheck}
@@ -244,7 +376,7 @@ object Typebus{
     }else if(!checkAdditions.isEmpty && checkAdditions.exists(!_.hasDefault) ){ // adding a new field without a default value ?
       c.abort(c.enclosingPosition,
         s"""
-           |Schema evolution Faild !!
+           |Schema evolution Failed !!
            |You have added a new field to a typebus type that does not have a default value.
            |Type failed:
            |${checkAdditions.find(! _.hasDefault).get}
@@ -253,7 +385,7 @@ object Typebus{
     }else if(!checkSubtractions.isEmpty && checkSubtractions.exists(!_.hasDefault) ){ // removing a field that does not contain a default value ?
       c.abort(c.enclosingPosition,
         s"""
-           |Schema evolution Faild !!
+           |Schema evolution Failed !!
            |You have removed a field from your schema that did not contain a default value
            |Type failed:
            |${checkSubtractions.find(! _.hasDefault).get}
@@ -270,12 +402,94 @@ object Typebus{
       val fqn = symbol.fullName
       val code =
         q"""
-            io.surfkit.typebus.module.Service.registerServiceType(new $Rtpe, $fqn)
+            io.surfkit.typebus.module.Service.registerServiceType[${symbol}](new $Rtpe, $fqn)
             new ByteStreamReaderWriter(new $Rtpe, new $Wtpe)
          """
       //println(showCode(code))
       c.Expr[ByteStreamReaderWriter[Z]](code)
     }
+  }
+
+  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Seq[String]){
+    def toSrcCode = {
+      val typeToken = `type`.split('.').last
+      val inheritenceStr = baseClasses.mkString(" extends "," with ","")
+      symbol match{
+        case Symbol.CaseClass if members.isEmpty =>
+          s"""
+            |final case object ${typeToken}${inheritenceStr}
+          """.stripMargin
+        case Symbol.CaseClass =>
+          s"""
+            |final case class ${typeToken}(${members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}
+          """.stripMargin
+        case Symbol.Trait =>
+          s"""
+            |sealed trait ${typeToken}${inheritenceStr}{
+            |${members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\t","\n\t","\t")}
+            |}
+          """.stripMargin
+        case Symbol.Companion =>
+          s"""
+            |object ${typeToken}${inheritenceStr}{
+            |
+            |}
+          """.stripMargin
+        case _ => ""
+      }
+    }
+  }
+
+  def tree2CodeSrc(trees: Seq[Node]): List[(String, CodeSrc)] = {
+    def shortName(name: String) = name.split('.').last
+    def collapseNode(n: Node): List[CodeSrc] = {
+      val (members: List[(String, (String, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
+        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(t, dv), List.empty[Node])
+        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(t, dv), List(n))
+        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(s"${c}[${t.`type`}]", dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
+        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (s"${c}[${t1.`type`}, ${t2.`type`}]", dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
+        case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
+      }.map(x => (x._1 -> x._2, x._3) ).unzip
+
+      CodeSrc(n.symbol, n.`type`, members.toMap, n.baseClasses.map(_.`type`)) ::  n.baseClasses
+          .filterNot(x => supportedBaseTypes.contains(x.`type`))
+          .toList.asInstanceOf[List[Node]].map(collapseNode).flatten ::: nodes.toList.flatten.map(collapseNode).flatten ::: n.companion.map(collapseNode).getOrElse(List.empty[CodeSrc])
+    }
+    // want to collect all the Node types
+    // sort them.. this should collect all the namespaces together
+    trees.map(collapseNode).flatten.map( x => (x.`type` +"-"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
+  }
+
+  def srcCodeWriter(codes: List[(String, CodeSrc)]) = {
+    codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString(".")).map{
+      case (pack, codeSrc) =>
+        pack -> codeSrc.map(_._2).map(_.toSrcCode)
+    }
+  }
+
+  def selfCodeGen = {
+    import scala.collection.JavaConverters._
+    val uri = this.getClass.getResource("/typebus").toURI()
+    val fileSystem = FileSystems.newFileSystem(uri, scala.collection.mutable.HashMap.empty[String, String].asJava)
+    val tbPath =fileSystem.getPath("/typebus")
+    val walk = Files.walk(tbPath, 1)
+    var astTree = List.empty[Node]
+    val it=walk.iterator()
+    it.next()  // ignore "/typebus" directory we only want the contents.
+    it.forEachRemaining{ x =>
+      println(x)
+      astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+    }
+    println(s"AST tree: ${astTree}")
+    val srcList = tree2CodeSrc(astTree)
+    srcList.foreach(println)
+    srcCodeWriter(srcList)
+    println("\nSRC:\n\n")
+    println(srcCodeWriter(srcList))
+    println("\n\n")
+
+    fileSystem.close()
+    Map.empty[String, String]
   }
 
   /***
@@ -305,14 +519,19 @@ object Typebus{
   def merge(r: Node, l: Node): Node = {
     val mergeMap: Map[String, (Option[Property], Option[Property])] = (l.members.keys ++ r.members.keys).map( k => (k -> (l.members.get(k), r.members.get(k)) ) ).toMap
     val mergedMembers = mergeMap.map{
-      case (k, (Some(Property(ln:Node, lHasDefault)), Some(Property(rn:Node, rHasDefault)))) =>
-        k -> Property(merge(ln, rn), lHasDefault && rHasDefault)
+      case (k, (Some(Property(ln:Node, lHasDefault, lDefaultVal)), Some(Property(rn:Node, rHasDefault, _)))) =>
+        k -> Property(merge(ln, rn), lHasDefault && rHasDefault, lDefaultVal)
       case (k, (Some(x), Some(y))) => k -> x
       case (k, (None, Some(y))) => k -> y
       case (k, (Some(x), None)) => k -> x
     }
-    Node(r.`type`, mergedMembers)
+    val mergeBaseClasses = (l.baseClasses ++ r.baseClasses).toSet.toSeq
+    // What about someone that converts a trait to case class or the other way around?
+    Node(r.symbol, r.`type`, mergedMembers, mergeBaseClasses, l.companion)
   }
+
+
+
 
   /***
     * recursive function to produce a List of PropScope.  This is a flat list of fully qualified property names

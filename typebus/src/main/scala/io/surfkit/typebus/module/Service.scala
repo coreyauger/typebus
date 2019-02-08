@@ -17,7 +17,10 @@ import scala.reflect.ClassTag
 object Service{
   val registry = scala.collection.mutable.HashMap.empty[ EventType, String]
 
-  def registerServiceType(serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
+  def registerServiceType[T : ClassTag](serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
+
+    val runtimeClass = scala.reflect.classTag[T].runtimeClass
+    println(s"\n\nruntimeClass: ${runtimeClass}")
     // CA - pretty cheesy data store.
     registry += EventType.parse(fqn) -> serviceType.schema
   }

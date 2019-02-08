@@ -1,7 +1,7 @@
 package io.surfkit.typebus
 
-import java.nio.file.{FileSystems, Files, Paths}
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.nio.file.{FileSystems, Files, Path, Paths}
+import java.io._
 import java.util.stream.Collectors
 
 import boopickle.Default._
@@ -484,6 +484,25 @@ object Typebus{
     }.filterNot(_._2.isEmpty)
   }
 
+  def codeGen(database: Path) = {
+    if(Files.isDirectory(database)) {
+      val typebusDb =
+          if (database.endsWith("/typebus"))database
+          else database.resolveSibling(Paths.get("src/main/resources/typebus/"))
+      if(Files.isDirectory(typebusDb)) {
+        val walk = Files.walk(typebusDb, 1)
+        var astTree = List.empty[Node]
+        val it=walk.iterator()
+        it.next()  // ignore "/typebus" directory we only want the contents.
+        it.forEachRemaining{ x =>
+          astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+        }
+        astNodeToServiceGenerator(astTree)
+      }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
+    }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
+
+  }
+
   def selfCodeGen = {
     import scala.collection.JavaConverters._
     val uri = this.getClass.getResource("/typebus").toURI()
@@ -497,13 +516,14 @@ object Typebus{
       println(x)
       astTree = deSerialise(Files.readAllBytes(x)) :: astTree
     }
-    println(s"AST tree: ${astTree}")
+    fileSystem.close()
+    astNodeToServiceGenerator(astTree)
+  }
+
+  def astNodeToServiceGenerator(astTree: List[Node])={
     val srcList = tree2CodeSrc(astTree)
     srcList.foreach(println)
     val generated = srcCodeGenerator(srcList)
-    println("\nSRC:\n\n")
-    fileSystem.close()
-
     val serviceGenerator = gen.ServiceGenerator(
       "service-name",
       gen.Language.Scala,

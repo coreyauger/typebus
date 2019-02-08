@@ -85,26 +85,25 @@ package object gen {
           sb.append("/** MACHINE-GENERATED FROM AVRO SCHEMA. DO NOT EDIT DIRECTLY */\n\n")
           sb.append(s"package ${packageName.split('.').reverse.drop(1).reverse.mkString(".")}\n\n")
           sb.append("import akka.actor.ActorSystem\n")
-          sb.append("import io.surfkit.typebus.Implicits._\n")
           sb.append("import scala.concurrent.Future\n")
           sb.append("import io.surfkit.typebus._\n")
           sb.append("import io.surfkit.typebus.client._\n")
           sb.append("import io.surfkit.typebus.event.ServiceIdentifier\n\n")
           sb.append(s"package object ${packageName.split('.').last}{\n\n")
-          sb.append( classes.map(x => "  "+ x.classRep).mkString("\n") )
-          sb.append(s"\n\n  object Implicits extends AvroByteStreams{\n")
+          sb.append( classes.map(x => x.classRep).mkString("\n") )
+          sb.append(s"\n\n   object Implicits extends AvroByteStreams{\n")
           sb.append( classes.map{ cc =>
             s"""
-              |   implicit val ${cc.simpleName}Reader = new AvroByteStreamReader[${cc.simpleName}]
-              |   implicit val ${cc.simpleName}Writer = new AvroByteStreamWriter[${cc.simpleName}]
+              |      implicit val ${cc.simpleName}Reader = new AvroByteStreamReader[${cc.simpleName}]
+              |      implicit val ${cc.simpleName}Writer = new AvroByteStreamWriter[${cc.simpleName}]
             """.stripMargin
           }.mkString("") )
-          sb.append(s"\n  }")
+          sb.append(s"\n   }")
           // add the client mappings...
-          sb.append("\n\n  /** Generated Actor Client */\n")
+          sb.append("\n\n   /** Generated Actor Client */\n")
 
-          sb.append(s"  class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
-          sb.append( "    import Implicits._\n")
+          sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
+          sb.append( "       import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")
           sb.append( methodsInThisPackage.map{ method =>
@@ -119,9 +118,9 @@ package object gen {
             }
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"     def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
+            s"      def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
           }.mkString("\n") )
-          sb.append(s"\n  }")
+          sb.append(s"\n   }")
 
           sb.append(s"\n}\n")
           (packageName, sb.toString)

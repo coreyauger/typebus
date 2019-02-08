@@ -433,7 +433,7 @@ object Typebus{
     trees.map(collapseNode).flatten.map( x => (x.`type` +"|"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
   }
 
-  def srcCodeWriter(codes: List[(String, CodeSrc)]) = {
+  def srcCodeGenerator(codes: List[(String, CodeSrc)]) = {
     val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
     grouped.map{
       case (pack, codeSrc) =>
@@ -444,19 +444,23 @@ object Typebus{
             else code.baseClasses.mkString(" extends "," with ","")
           code.symbol match{
             case Symbol.CaseClass if code.members.isEmpty =>
-              Some(s"""
-                 |final case object ${typeToken}${inheritenceStr}
-              """.stripMargin)
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep = s"   final case object ${typeToken}${inheritenceStr}"))
             case Symbol.CaseClass =>
-              Some(s"""
-                 |final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}
-              """.stripMargin)
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}"))
             case Symbol.Trait =>
-              Some(s"""
-                 |sealed trait ${typeToken}${inheritenceStr}{
-                 |${code.members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\t","\n\t","\t")}
-                 |}
-              """.stripMargin)
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
             case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
               val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
                 val y = yy._2
@@ -465,19 +469,15 @@ object Typebus{
                   if(y.baseClasses.isEmpty) ""
                   else y.baseClasses.mkString(" extends "," with ","")
                 if(y.members.isEmpty)
-                  s"""
-                     |  final case object ${tt}${inheritenceStr2}
-                """.stripMargin
+                  s"      final case object ${tt}${inheritenceStr2}\n"
                 else
-                s"""
-                   |  final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}
-                """.stripMargin
+                s"      final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}"
               }
-              Some(s"""
-                 |object ${typeToken}${inheritenceStr}{
-                 |${inner.mkString}
-                 |}
-              """.stripMargin)
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   object ${typeToken}${inheritenceStr}{\n${inner.mkString}\n}"))
             case _ => None
           }
         }
@@ -500,13 +500,18 @@ object Typebus{
     println(s"AST tree: ${astTree}")
     val srcList = tree2CodeSrc(astTree)
     srcList.foreach(println)
-    srcCodeWriter(srcList)
+    val generated = srcCodeGenerator(srcList)
     println("\nSRC:\n\n")
-    println(srcCodeWriter(srcList))
-    println("\n\n")
-
     fileSystem.close()
-    Map.empty[String, String]
+
+    println(gen.ScalaCodeWriter.writeService("kafka", gen.ServiceGenerator(
+      "service-name",
+      gen.Language.Scala,
+      methods = Seq.empty,
+      classes = generated.flatMap(_._2).toSet
+    )))
+
+    generated.flatMap(_._2)
   }
 
   /***

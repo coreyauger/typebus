@@ -98,7 +98,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
         responseTo = Some(meta.eventId)
       ),
       payload = writer.write(x))
-      meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+      meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
   }
 
   def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(

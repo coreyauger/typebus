@@ -103,6 +103,13 @@ package object event {
   case class GetServiceDescriptor(service: String) extends TypeBus
 
   /***
+    * RpcClient - used in EventMeta to make a direct reply to an RPC client
+    * @param path - the actor path of the RPC client request
+    * @param service - the service Identifier for the RPC client
+    */
+  case class RpcClient(path: String, service: ServiceIdentifier) extends TypeBus
+
+  /***
     * EventMeta - details and routing information for an Event
     * @param eventId - unique UUID of an event
     * @param eventType - the FQN of the event type
@@ -119,7 +126,7 @@ package object event {
                        source: String,
                        correlationId: Option[String],
                        trace: Boolean = false,
-                       directReply: Option[String] = None,
+                       directReply: Option[RpcClient] = None,
                        userId: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,

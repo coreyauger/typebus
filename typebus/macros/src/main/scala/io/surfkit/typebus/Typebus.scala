@@ -8,6 +8,7 @@ import boopickle.Default._
 
 import scala.collection.mutable
 import scala.concurrent.Future
+import io.surfkit.typebus.event.EventMeta
 
 /***
   * Schemacha - cheeky name for Schema wrapper
@@ -326,14 +327,7 @@ object Typebus{
 
     //println(s"members: ${tpe.members}")
     val rootScope = scoped(rootNode, "")
-
-    val root = Paths.get( this.getClass.getResource("/").getPath )
-    // We want the resource path before compile
-    val db = Paths.get( root.toString + "/../../../src/main/resources/typebus" )
-    if(Files.notExists(db))
-      Files.createDirectory(db)
-    val typeTable = Paths.get(db + s"/${symbol.fullName}")
-
+    val typeTable = databaseTablePath(symbol.fullName)
     if(Files.notExists(typeTable)){
       Files.write(typeTable, serialise(rootNode))
     }
@@ -574,6 +568,14 @@ object Typebus{
     Node(r.symbol, r.`type`, mergedMembers, mergeBaseClasses, l.companion)
   }
 
+  def databaseTablePath(key: String): Path = {
+    val root = Paths.get( this.getClass.getResource("/").getPath )
+    // We want the resource path before compile
+    val db = Paths.get( root.toString + "/../../../src/main/resources/typebus" )
+    if(Files.notExists(db))
+      Files.createDirectory(db)
+    Paths.get(db + s"/${key}")
+  }
 
 
 
@@ -610,42 +612,16 @@ object Typebus{
       }
     }
 
-
-
-
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: (T, Any) => Future[U]) = macro registerStream_impl2[T, U, R, W]
-
-  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: T => Future[U]) = macro registerStream_impl[T, U, R, W]
-
-  def registerStream_impl[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[T => Future[U]]) = {
-    import c.universe._
-    val tpeT = weakTypeOf[T]
-    val symbolT = weakTypeOf[T].typeSymbol
-    val tpeU = weakTypeOf[U]
-    val symbolU = weakTypeOf[U].typeSymbol
+  trait Store
+  final case class ServiceMethod(in: String, out: String) extends Store
+  final case class ServiceStore(service: Map[String, Set[ServiceMethod]]) extends Store
 
 
-    println(s"tpeT: ${tpeT}")
-    println(s"symbolT: ${symbolT}")
-    println(s"tpeU: ${tpeU}")
-    println(s"symbolU: ${symbolU}")
-    println(s"stream: ${stream}")
+  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: (T, EventMeta) => Future[U]) = macro registerStream_impl[T, U, R, W]
 
-    val code =
-      q"""
-            registerStream($stream)
-         """
-    //println(showCode(code))
-    //c.Expr[ByteStreamReaderWriter[Z]](code)
-    // FIXME: actual type of function
-    c.Expr[Any](code)
-
-  }
-
-
-  def registerStream_impl2[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[(T, Any) => Future[U]]) = {
+  def registerStream_impl[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[(T, EventMeta) => Future[U]]) = {
     import c.universe._
     val tpeT = weakTypeOf[T]
     val symbolT = weakTypeOf[T].typeSymbol

@@ -89,8 +89,7 @@ package object event {
     * @param serviceMethods - a list of all the ServiceMethod
     */
   case class ServiceDescriptor(
-                              service: String,
-                              serviceId: String,
+                              service: ServiceIdentifier,
                               upTime: Instant,
                               serviceMethods: Seq[ServiceMethod],
                               types: Map[String, TypeSchema]
@@ -101,6 +100,13 @@ package object event {
     * @param service - the name of the service that you want
     */
   case class GetServiceDescriptor(service: String) extends TypeBus
+
+  /***
+    * RpcClient - used in EventMeta to make a direct reply to an RPC client
+    * @param path - the actor path of the RPC client request
+    * @param service - the service Identifier for the RPC client
+    */
+  case class RpcClient(path: String, service: ServiceIdentifier) extends TypeBus
 
   /***
     * EventMeta - details and routing information for an Event
@@ -119,7 +125,7 @@ package object event {
                        source: String,
                        correlationId: Option[String],
                        trace: Boolean = false,
-                       directReply: Option[String] = None,
+                       directReply: Option[RpcClient] = None,
                        userId: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,

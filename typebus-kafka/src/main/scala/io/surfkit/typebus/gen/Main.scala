@@ -21,7 +21,9 @@ object Main extends App {
   implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
 
   private class GeneratorService extends Service[TypeBus]("code-gen") with KafkaBus[TypeBus] with AvroByteStreams {
-    registerStream(genScalaServiceDescription("Kafka", List("src", "main", "scala")) _)
+
+    // TODO: gen from bus..
+    //registerStream(genScalaServiceDescription("Kafka", List("src", "main", "scala")) _)
     startTypeBus
     val getServiceDescriptor = GetServiceDescriptor(args.last)
 

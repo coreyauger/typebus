@@ -7,6 +7,7 @@ import java.util.stream.Collectors
 import boopickle.Default._
 
 import scala.collection.mutable
+import scala.concurrent.Future
 
 /***
   * Schemacha - cheeky name for Schema wrapper
@@ -608,4 +609,64 @@ object Typebus{
         case _ => x :: xs
       }
     }
+
+
+
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: (T, Any) => Future[U]) = macro registerStream_impl2[T, U, R, W]
+
+  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: T => Future[U]) = macro registerStream_impl[T, U, R, W]
+
+  def registerStream_impl[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[T => Future[U]]) = {
+    import c.universe._
+    val tpeT = weakTypeOf[T]
+    val symbolT = weakTypeOf[T].typeSymbol
+    val tpeU = weakTypeOf[U]
+    val symbolU = weakTypeOf[U].typeSymbol
+
+
+    println(s"tpeT: ${tpeT}")
+    println(s"symbolT: ${symbolT}")
+    println(s"tpeU: ${tpeU}")
+    println(s"symbolU: ${symbolU}")
+    println(s"stream: ${stream}")
+
+    val code =
+      q"""
+            registerStream($stream)
+         """
+    //println(showCode(code))
+    //c.Expr[ByteStreamReaderWriter[Z]](code)
+    // FIXME: actual type of function
+    c.Expr[Any](code)
+
+  }
+
+
+  def registerStream_impl2[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[(T, Any) => Future[U]]) = {
+    import c.universe._
+    val tpeT = weakTypeOf[T]
+    val symbolT = weakTypeOf[T].typeSymbol
+    val tpeU = weakTypeOf[U]
+    val symbolU = weakTypeOf[U].typeSymbol
+
+
+    println(s"tpeT: ${tpeT}")
+    println(s"symbolT: ${symbolT}")
+    println(s"tpeU: ${tpeU}")
+    println(s"symbolU: ${symbolU}")
+    println(s"stream: ${stream}")
+
+    val code =
+      q"""
+            registerStream($stream)
+         """
+    //println(showCode(code))
+    //c.Expr[ByteStreamReaderWriter[Z]](code)
+    // FIXME: actual type of function
+    c.Expr[Any](code)
+
+  }
 }

@@ -101,12 +101,12 @@ trait AkkaBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams with 
               writer.write(ret.asInstanceOf[TypeBus])
             }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
           )
-          event.meta.directReply.foreach( context.system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+          event.meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
           publish(publishedEvent)
         }
       }catch{
         case t:Throwable =>
-          val error = s"Error consuming event: ${publish.meta.eventType}\n${t.getMessage}"
+          val error = s"Error consuming event: ${event.meta.eventType}\n${t.getMessage}"
           produceErrorReport(t, event.meta, error)
       }
   }

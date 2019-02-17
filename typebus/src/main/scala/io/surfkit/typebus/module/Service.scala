@@ -7,9 +7,6 @@ import akka.util.Timeout
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
-
-import org.joda.time.DateTime
-
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -101,12 +98,11 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
         responseTo = Some(meta.eventId)
       ),
       payload = writer.write(x))
-      meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+      meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
   }
 
   def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(
-    service = serviceName,
-    serviceId = serviceId,
+    service = ServiceIdentifier(serviceName, serviceId),
     upTime = upTime,
     serviceMethods = listOfFunctions.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>

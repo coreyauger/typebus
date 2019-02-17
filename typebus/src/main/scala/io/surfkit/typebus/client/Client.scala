@@ -1,6 +1,7 @@
 package io.surfkit.typebus.client
 
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
+import io.surfkit.typebus.event.EventMeta
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -18,10 +19,11 @@ trait Client{
     * @param w - ByteStreamWriter (defaults to avro)
     * @param r - ByteStreamReader (defaults to avro)
     * @tparam T - The IN type for the service call
+    * @param eventMeta - The Event Meta from any previous typebus calls to thread through the request
     * @tparam U - The OUT type in the service called. Wrapped as Future[U]
     * @return - The Future[U] return from the service call.
     */
-  def wire[T : ClassTag, U : ClassTag](x: T)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U]
+  def wire[T : ClassTag, U : ClassTag](x: T, eventMeta: Option[EventMeta] = None)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U]
 }
 
 

@@ -87,6 +87,7 @@ package object gen {
           sb.append("import akka.actor.ActorSystem\n")
           sb.append("import scala.concurrent.Future\n")
           sb.append("import io.surfkit.typebus._\n")
+          sb.append("import io.surfkit.typebus.event.EventMeta\n")
           sb.append("import io.surfkit.typebus.client._\n")
           sb.append("import io.surfkit.typebus.event.ServiceIdentifier\n\n")
           sb.append(s"package object ${packageName.split('.').last}{\n\n")
@@ -118,7 +119,7 @@ package object gen {
             }
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"      def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x)"
+            s"     def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}, eventMeta: Option[EventMeta] = None): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x, eventMeta)"
           }.mkString("\n") )
           sb.append(s"\n   }")
 

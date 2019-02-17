@@ -20,8 +20,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster" % akkaV,
   "com.typesafe.akka" %% "akka-slf4j" % akkaV,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2",
-  "com.julianpeeters" %% "avrohugger-core" % "1.0.0-RC15"
+  "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2"
 )
 
 val paradiseVersion = "2.1.1"

@@ -23,8 +23,6 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import java.util.UUID
 import java.time.Instant
 
-import org.joda.time.DateTime
-
 trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
   service: Service[UserBaseType] =>
 
@@ -126,7 +124,7 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
               writer.write(x._3.asInstanceOf[TypeBus])
             }.getOrElse(listOfImplicitsWriters(EventType.parse(retType)).write(x._3.asInstanceOf[UserBaseType]))
           )
-          x._2.meta.directReply.foreach( system.actorSelection(_).resolveOne().map( actor => actor ! publishedEvent ) )
+          x._2.meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
           publish(publishedEvent)
         }
         system.log.debug("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")

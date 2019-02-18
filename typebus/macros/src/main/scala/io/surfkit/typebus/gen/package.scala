@@ -78,7 +78,6 @@ package object gen {
       * @return - List of tuple containing (package name, source code).
       */
     def writeService(busType: String, generator: ServiceGenerator): List[(String, String)] = {
-      val prefix = "api."
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
       val fqlToCaseClass = generator.classes.map(x => x.fqn -> x).toMap
       generator.classes.groupBy(_.packageName).map{
@@ -104,8 +103,9 @@ package object gen {
           sb.append(s"\n   }")
           // add the client mappings...
           sb.append("\n\n   /** Generated Actor Client */\n")
-
-          sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
+          // FIXME: we dont' know the service name when generating from the cli
+          //sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
+          sb.append(s"   class Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
           sb.append( "      import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")
@@ -161,17 +161,29 @@ package object gen {
   import io.surfkit.typebus.Typebus._
   import io.surfkit.typebus.annotations.ServiceMethod._
 
+  val prefix = "api."
 
-  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Set[String])
+  sealed trait Typed
+  case class Simple(name: String) extends Typed{
+    override def toString: String = name
+  }
+  case class MonoTyped(container: String, `type`: String) extends Typed{
+    override def toString: String = s"${container}[${`type`}]"
+  }
+  case class BiTyped(container: String, left: String, right: String) extends Typed{
+    override def toString: String = s"${container}[${left},${right}]"
+  }
+
+  case class CodeSrc(symbol: io.surfkit.typebus.Typebus.Symbol, `type`: String, members: Map[String, (Typed, Option[String])], baseClasses: Set[String])
 
   def tree2CodeSrc(trees: Seq[Node]): List[(String, CodeSrc)] = {
     def shortName(name: String) = name.split('.').last
     def collapseNode(n: Node): List[CodeSrc] = {
-      val (members: List[(String, (String, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
-        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(t, dv), List.empty[Node])
-        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(t, dv), List(n))
-        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(s"${c}[${t.`type`}]", dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
-        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (s"${c}[${t1.`type`}, ${t2.`type`}]", dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
+      val (members: List[(String, (Typed, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
+        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(Simple(t), dv), List.empty[Node])
+        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(Simple(t), dv), List(n))
+        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(MonoTyped(c, t.`type`), dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
+        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (BiTyped(c,t1.`type`,t2.`type`), dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
         case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
       }.map(x => (x._1 -> x._2, x._3) ).unzip
 
@@ -185,11 +197,28 @@ package object gen {
   }
 
   def srcCodeGenerator(codes: List[(String, CodeSrc)]) = {
-    //val prefix = "api."
-    //val prefixedCods = codes.map{
-    //  case (pack, codeSrc) => (prefix+pack, CodeSrc())
-    //}
-    val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
+    // collect a list of all the fqn names that we will generate on..
+    // we want to prefix all our codegen namespace behind "api."
+    val fqnSet = codes.map(_._2.`type`).toSet
+    def prefixName(name: String) =
+      if(fqnSet.contains(name))prefix + name
+      else name
+    def prefixTyped(typed: Typed) = typed match{
+      case Simple(name) => Simple(prefixName(name))
+      case MonoTyped(c, t) => MonoTyped(prefixName(c), prefixName(t))
+      case BiTyped(c, l, r) => BiTyped(prefixName(c), prefixName(l), prefixName(r))
+    }
+    val prefixedCodes = codes.map{
+      case (pack, codeSrc) => (prefix+pack, CodeSrc(
+        symbol = codeSrc.symbol,
+        `type` = prefixName(codeSrc.`type`),
+        members = codeSrc.members.map{
+          case (name, (t, default)) => name -> (prefixTyped(t), default)
+        },
+        baseClasses = codeSrc.baseClasses.map(prefixName)
+      ))
+    }
+    val grouped = prefixedCodes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
     grouped.map{
       case (pack, codeSrc) =>
         pack -> codeSrc.map(_._2).flatMap{ code =>
@@ -284,10 +313,11 @@ package object gen {
     val srcList = tree2CodeSrc(astTree)
     srcList.foreach(println)
     val generated = srcCodeGenerator(srcList)
+    println(s"\n\n BLARG\n:${methods}")
     val serviceGenerator = gen.ServiceGenerator(
       "service-name",
       gen.Language.Scala,
-      methods = methods.map( x => ServiceMethodGenerator(Fqn(x.in), Fqn(x.out)) ),
+      methods = methods.map( x => ServiceMethodGenerator(Fqn(prefix + x.in), Fqn(prefix + x.out)) ),
       classes = generated.flatMap(_._2).toSet
     )
     println(serviceGenerator)

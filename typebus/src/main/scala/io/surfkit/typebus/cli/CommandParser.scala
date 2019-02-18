@@ -57,7 +57,7 @@ object CommandParser {
           c.copy(gen = c.gen.copy(out = Some(o) )) ).text("output to a directory (defaults to this projects source directory)"),
         opt[String]("service").abbr("s").action( (s, c) =>
           c.copy(gen = c.gen.copy(service = s )) ).text("contact service over typebus to code gen from"),
-        opt[Boolean]("push").abbr("p").action( (s, c) =>
+        opt[Unit]("push").abbr("p").action( (s, c) =>
           c.copy(gen = c.gen.copy(push = true )) ).text("push codegen to services defined in application.conf")
       )
   }

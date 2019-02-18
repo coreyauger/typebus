@@ -121,7 +121,7 @@ package object gen {
             }
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"     def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}, eventMeta: Option[EventMeta] = None): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x, eventMeta)"
+            s"      def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}, eventMeta: Option[EventMeta] = None): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x, eventMeta)"
           }.mkString("\n") )
           sb.append(s"\n   }")
 

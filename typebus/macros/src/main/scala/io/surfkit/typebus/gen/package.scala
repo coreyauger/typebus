@@ -78,6 +78,7 @@ package object gen {
       * @return - List of tuple containing (package name, source code).
       */
     def writeService(busType: String, generator: ServiceGenerator): List[(String, String)] = {
+      val prefix = "api."
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
       val fqlToCaseClass = generator.classes.map(x => x.fqn -> x).toMap
       generator.classes.groupBy(_.packageName).map{
@@ -142,7 +143,6 @@ package object gen {
             if (!Files.exists(modelPath))
               Files.createDirectories(modelPath)
             val filePath = Paths.get(path.mkString("/") + "/data.scala")
-            //if(!Files.exists(filePath)){
             Files.write(filePath, sourceCode.getBytes)
         }
       }catch{
@@ -185,6 +185,10 @@ package object gen {
   }
 
   def srcCodeGenerator(codes: List[(String, CodeSrc)]) = {
+    //val prefix = "api."
+    //val prefixedCods = codes.map{
+    //  case (pack, codeSrc) => (prefix+pack, CodeSrc())
+    //}
     val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
     grouped.map{
       case (pack, codeSrc) =>

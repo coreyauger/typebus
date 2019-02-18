@@ -23,8 +23,6 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import java.util.UUID
 import java.time.Instant
 
-import org.joda.time.DateTime
-
 trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
   service: Service[UserBaseType] =>
 

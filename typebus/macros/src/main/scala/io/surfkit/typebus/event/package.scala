@@ -89,8 +89,7 @@ package object event {
     * @param serviceMethods - a list of all the ServiceMethod
     */
   case class ServiceDescriptor(
-                              service: String,
-                              serviceId: String,
+                              service: ServiceIdentifier,
                               upTime: Instant,
                               serviceMethods: Seq[ServiceMethod],
                               types: Map[String, TypeSchema]

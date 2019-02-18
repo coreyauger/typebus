@@ -7,9 +7,6 @@ import akka.util.Timeout
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
-
-import org.joda.time.DateTime
-
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -17,7 +14,10 @@ import scala.reflect.ClassTag
 object Service{
   val registry = scala.collection.mutable.HashMap.empty[ EventType, String]
 
-  def registerServiceType(serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
+  def registerServiceType[T : ClassTag](serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
+
+    val runtimeClass = scala.reflect.classTag[T].runtimeClass
+    println(s"\n\nruntimeClass: ${runtimeClass}")
     // CA - pretty cheesy data store.
     registry += EventType.parse(fqn) -> serviceType.schema
   }
@@ -32,18 +32,6 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
   val upTime = Instant.now()
   val serviceId = UUID.randomUUID().toString
   val serviceIdentifier = ServiceIdentifier(serviceName, serviceId)
-
-  /***
-    * registerStream - register a service level function
-    * @param f - the function to register
-    * @param reader - ByteStreamReader that knows how to convert Array[Byte] to a type T
-    * @param writer - ByteStreamWriter that knows how to convert a type U to Array[Byte]
-    * @tparam T - The IN service request type
-    * @tparam U - The OUT service request type
-    * @return - Unit
-    */
-  def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
-    op(funToPF(f))
 
   /***
     * registerStream - register a service level function that will also receive EventMeta
@@ -102,8 +90,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
   }
 
   def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(
-    service = serviceName,
-    serviceId = serviceId,
+    service = ServiceIdentifier(serviceName, serviceId),
     upTime = upTime,
     serviceMethods = listOfFunctions.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>

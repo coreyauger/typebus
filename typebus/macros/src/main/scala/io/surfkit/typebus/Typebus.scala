@@ -60,7 +60,7 @@ class ByteStreamReaderWriter[A](reader: ByteStreamReader[A], writer: ByteStreamW
 }
 
 
-object Typebus{
+object Typebus extends ResourceDb{
   import scala.language.experimental.macros
   import scala.reflect.macros.blackbox
 
@@ -210,8 +210,6 @@ object Typebus{
     }
 
 
-
-
     def termTree(t: c.universe.Type, exploreCompanion: Boolean = true): Term = {
       //println(s"t: ${t}")
       val symbol = t.typeSymbol ; //println(s"identify symbol: ${symbol}")
@@ -323,7 +321,7 @@ object Typebus{
       }
     }
     val rootNode = termTree(tpe).asInstanceOf[Node]
-    println(s"rootNode: ${rootNode}")
+    //println(s"rootNode: ${rootNode}")
 
     //println(s"members: ${tpe.members}")
     val rootScope = scoped(rootNode, "")
@@ -406,132 +404,6 @@ object Typebus{
     }
   }
 
-  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Set[String])
-
-  def tree2CodeSrc(trees: Seq[Node]): List[(String, CodeSrc)] = {
-    def shortName(name: String) = name.split('.').last
-    def collapseNode(n: Node): List[CodeSrc] = {
-      val (members: List[(String, (String, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
-        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(t, dv), List.empty[Node])
-        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(t, dv), List(n))
-        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(s"${c}[${t.`type`}]", dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
-        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (s"${c}[${t1.`type`}, ${t2.`type`}]", dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
-        case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
-      }.map(x => (x._1 -> x._2, x._3) ).unzip
-
-      CodeSrc(n.symbol, n.`type`, members.toMap, n.baseClasses.map(_.`type`).toSet) ::  n.baseClasses
-          .filterNot(x => supportedBaseTypes.contains(x.`type`))
-          .toList.asInstanceOf[List[Node]].map(collapseNode).flatten ::: nodes.toList.flatten.map(collapseNode).flatten ::: n.companion.map(collapseNode).getOrElse(List.empty[CodeSrc])
-    }
-    // want to collect all the Node types
-    // sort them.. this should collect all the namespaces together
-    trees.map(collapseNode).flatten.map( x => (x.`type` +"|"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
-  }
-
-  def srcCodeGenerator(codes: List[(String, CodeSrc)]) = {
-    val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
-    grouped.map{
-      case (pack, codeSrc) =>
-        pack -> codeSrc.map(_._2).flatMap{ code =>
-          val typeToken = code.`type`.split('.').last
-          val inheritenceStr =
-            if(code.baseClasses.isEmpty) ""
-            else code.baseClasses.mkString(" extends "," with ","")
-          code.symbol match{
-            case Symbol.CaseClass if code.members.isEmpty =>
-              Some(gen.GeneratedClass(
-                fqn = gen.Fqn(code.`type`),
-                packageName = pack,
-                simpleName = typeToken,
-                classRep = s"   final case object ${typeToken}${inheritenceStr}"))
-            case Symbol.CaseClass =>
-              Some(gen.GeneratedClass(
-                fqn = gen.Fqn(code.`type`),
-                packageName = pack,
-                simpleName = typeToken,
-                classRep =s"   final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}"))
-            case Symbol.Trait =>
-              Some(gen.GeneratedClass(
-                fqn = gen.Fqn(code.`type`),
-                packageName = pack,
-                simpleName = typeToken,
-                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"      def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
-            case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
-              val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
-                val y = yy._2
-                val tt = y.`type`.split('.').last
-                val inheritenceStr2 =
-                  if(y.baseClasses.isEmpty) ""
-                  else y.baseClasses.mkString(" extends "," with ","")
-                if(y.members.isEmpty)
-                  s"      final case object ${tt}${inheritenceStr2}\n"
-                else
-                s"      final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}"
-              }
-              Some(gen.GeneratedClass(
-                fqn = gen.Fqn(code.`type`),
-                packageName = pack,
-                simpleName = typeToken,
-                classRep =s"   object ${typeToken}${inheritenceStr}{\n${inner.mkString}\n   }"))
-            case _ => None
-          }
-        }
-    }.filterNot(_._2.isEmpty)
-  }
-
-  def codeGen(database: Path) = {
-    println(s"path: ${database}")
-    if(Files.isDirectory(database)) {
-      val typebusDb =
-          if (database.endsWith("typebus"))database
-          else database.resolve(Paths.get("src/main/resources/typebus/"))
-      println(s"resolved: ${typebusDb}")
-      if(Files.isDirectory(typebusDb)) {
-        val walk = Files.walk(typebusDb, 1)
-        var astTree = List.empty[Node]
-        val it=walk.iterator()
-        it.next()  // ignore "/typebus" directory we only want the contents.
-        it.forEachRemaining{ x =>
-          astTree = deSerialise(Files.readAllBytes(x)) :: astTree
-        }
-        astNodeToServiceGenerator(astTree)
-      }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
-    }else throw new FileNotFoundException(s"Not a directory: ${database}")
-
-  }
-
-  def selfCodeGen = {
-    import scala.collection.JavaConverters._
-    val uri = this.getClass.getResource("/typebus").toURI()
-    val fileSystem = FileSystems.newFileSystem(uri, scala.collection.mutable.HashMap.empty[String, String].asJava)
-    val tbPath =fileSystem.getPath("/typebus")
-    val walk = Files.walk(tbPath, 1)
-    var astTree = List.empty[Node]
-    val it=walk.iterator()
-    it.next()  // ignore "/typebus" directory we only want the contents.
-    it.forEachRemaining{ x =>
-      println(x)
-      astTree = deSerialise(Files.readAllBytes(x)) :: astTree
-    }
-    fileSystem.close()
-    astNodeToServiceGenerator(astTree)
-  }
-
-  def astNodeToServiceGenerator(astTree: List[Node])={
-    val srcList = tree2CodeSrc(astTree)
-    srcList.foreach(println)
-    val generated = srcCodeGenerator(srcList)
-    val serviceGenerator = gen.ServiceGenerator(
-      "service-name",
-      gen.Language.Scala,
-      methods = Seq.empty,
-      classes = generated.flatMap(_._2).toSet
-    )
-    println(serviceGenerator)
-
-    serviceGenerator
-  }
-
   /***
     * Convert an AST Node type to a byte array.  Used for writing to our DB
     * @param value Node that we want to write
@@ -568,14 +440,7 @@ object Typebus{
     Node(r.symbol, r.`type`, mergedMembers, mergeBaseClasses, l.companion)
   }
 
-  def databaseTablePath(key: String): Path = {
-    val root = Paths.get( this.getClass.getResource("/").getPath )
-    // We want the resource path before compile
-    val db = Paths.get( root.toString + "/../../../src/main/resources/typebus" )
-    if(Files.notExists(db))
-      Files.createDirectory(db)
-    Paths.get(db + s"/${key}")
-  }
+
 
 
 
@@ -611,38 +476,4 @@ object Typebus{
         case _ => x :: xs
       }
     }
-
-  //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  trait Store
-  final case class ServiceMethod(in: String, out: String) extends Store
-  final case class ServiceStore(service: Map[String, Set[ServiceMethod]]) extends Store
-
-
-  def registerStream[T, U, R <: ByteStreamReader[T], W <: ByteStreamWriter[U]](stream: (T, EventMeta) => Future[U]) = macro registerStream_impl[T, U, R, W]
-
-  def registerStream_impl[T: c.WeakTypeTag, U: c.WeakTypeTag, R: c.WeakTypeTag, W: c.WeakTypeTag](c: blackbox.Context)(stream: c.Expr[(T, EventMeta) => Future[U]]) = {
-    import c.universe._
-    val tpeT = weakTypeOf[T]
-    val symbolT = weakTypeOf[T].typeSymbol
-    val tpeU = weakTypeOf[U]
-    val symbolU = weakTypeOf[U].typeSymbol
-
-
-    println(s"tpeT: ${tpeT}")
-    println(s"symbolT: ${symbolT}")
-    println(s"tpeU: ${tpeU}")
-    println(s"symbolU: ${symbolU}")
-    println(s"stream: ${stream}")
-
-    val code =
-      q"""
-            registerStream($stream)
-         """
-    //println(showCode(code))
-    //c.Expr[ByteStreamReaderWriter[Z]](code)
-    // FIXME: actual type of function
-    c.Expr[Any](code)
-
-  }
 }

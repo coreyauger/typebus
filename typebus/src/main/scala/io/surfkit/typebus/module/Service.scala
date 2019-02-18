@@ -34,18 +34,6 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
   val serviceIdentifier = ServiceIdentifier(serviceName, serviceId)
 
   /***
-    * registerStream - register a service level function
-    * @param f - the function to register
-    * @param reader - ByteStreamReader that knows how to convert Array[Byte] to a type T
-    * @param writer - ByteStreamWriter that knows how to convert a type U to Array[Byte]
-    * @tparam T - The IN service request type
-    * @tparam U - The OUT service request type
-    * @return - Unit
-    */
-  def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f: (T) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
-    op(funToPF(f))
-
-  /***
     * registerStream - register a service level function that will also receive EventMeta
     * @param f - the function to register
     * @param reader - ByteStreamReader that knows how to convert Array[Byte] to a type T

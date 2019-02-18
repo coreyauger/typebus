@@ -50,13 +50,13 @@ object Main extends App {
         }else if(genCmd.push){
           // get the project to push to
           println("push code gen...")
-          val generated = Typebus.selfCodeGen
+          val generated = gen.selfCodeGen
           genCmd.out.foreach { outFile =>
             gen.ScalaCodeWriter.writeCodeToFiles("Kafka", generated, outFile.getAbsolutePath.split('/').toList )
           }
         }else if(!genCmd.target.isEmpty){
           val target = genCmd.target.get
-          val generated = Typebus.codeGen(target.toPath)
+          val generated = gen.codeGen(target.toPath)
           genCmd.out.foreach { outFile =>
             gen.ScalaCodeWriter.writeCodeToFiles("Kafka", generated, outFile.getAbsolutePath.split('/').toList )
           }

@@ -1,6 +1,7 @@
 package io.surfkit.typebus
 
-import java.nio.file.{Files, Paths}
+import java.io.FileNotFoundException
+import java.nio.file.{FileSystems, Files, Path, Paths}
 
 
 package object gen {
@@ -59,7 +60,7 @@ package object gen {
   final case class ServiceGenerator(
                              serviceName: String,
                              language: Language,
-                             methods: Seq[ServiceMethodGenerator],
+                             methods: Set[ServiceMethodGenerator],
                              classes: Set[GeneratedClass]
                              ) extends Gen
 
@@ -104,7 +105,7 @@ package object gen {
           sb.append("\n\n   /** Generated Actor Client */\n")
 
           sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
-          sb.append( "       import Implicits._\n")
+          sb.append( "      import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")
           sb.append( methodsInThisPackage.map{ method =>
@@ -153,4 +154,140 @@ package object gen {
     }
   }
 
+
+
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  import io.surfkit.typebus.Typebus._
+  import io.surfkit.typebus.annotations.ServiceMethod._
+
+
+  case class CodeSrc(symbol: Symbol, `type`: String, members: Map[String, (String, Option[String])], baseClasses: Set[String])
+
+  def tree2CodeSrc(trees: Seq[Node]): List[(String, CodeSrc)] = {
+    def shortName(name: String) = name.split('.').last
+    def collapseNode(n: Node): List[CodeSrc] = {
+      val (members: List[(String, (String, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
+        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(t, dv), List.empty[Node])
+        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(t, dv), List(n))
+        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(s"${c}[${t.`type`}]", dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
+        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (s"${c}[${t1.`type`}, ${t2.`type`}]", dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
+        case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
+      }.map(x => (x._1 -> x._2, x._3) ).unzip
+
+      CodeSrc(n.symbol, n.`type`, members.toMap, n.baseClasses.map(_.`type`).toSet) ::  n.baseClasses
+        .filterNot(x => supportedBaseTypes.contains(x.`type`))
+        .toList.asInstanceOf[List[Node]].map(collapseNode).flatten ::: nodes.toList.flatten.map(collapseNode).flatten ::: n.companion.map(collapseNode).getOrElse(List.empty[CodeSrc])
+    }
+    // want to collect all the Node types
+    // sort them.. this should collect all the namespaces together
+    trees.map(collapseNode).flatten.map( x => (x.`type` +"|"+ x.symbol, x) ).toSet.toList.sortBy[String](_._1)
+  }
+
+  def srcCodeGenerator(codes: List[(String, CodeSrc)]) = {
+    val grouped = codes.groupBy(x => x._1.split('.').reverse.drop(1).reverse.mkString("."))
+    grouped.map{
+      case (pack, codeSrc) =>
+        pack -> codeSrc.map(_._2).flatMap{ code =>
+          val typeToken = code.`type`.split('.').last
+          val inheritenceStr =
+            if(code.baseClasses.isEmpty) ""
+            else code.baseClasses.mkString(" extends "," with ","")
+          code.symbol match{
+            case Symbol.CaseClass if code.members.isEmpty =>
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep = s"   final case object ${typeToken}${inheritenceStr}"))
+            case Symbol.CaseClass =>
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}"))
+            case Symbol.Trait =>
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"      def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
+            case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
+              val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
+                val y = yy._2
+                val tt = y.`type`.split('.').last
+                val inheritenceStr2 =
+                  if(y.baseClasses.isEmpty) ""
+                  else y.baseClasses.mkString(" extends "," with ","")
+                if(y.members.isEmpty)
+                  s"      final case object ${tt}${inheritenceStr2}\n"
+                else
+                  s"      final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}"
+              }
+              Some(gen.GeneratedClass(
+                fqn = gen.Fqn(code.`type`),
+                packageName = pack,
+                simpleName = typeToken,
+                classRep =s"   object ${typeToken}${inheritenceStr}{\n${inner.mkString}\n   }"))
+            case _ => None
+          }
+        }
+    }.filterNot(_._2.isEmpty)
+  }
+
+  def codeGen(database: Path) = {
+    println(s"path: ${database}")
+    if(Files.isDirectory(database)) {
+      val typebusDb =
+        if (database.endsWith("typebus"))database
+        else database.resolve(Paths.get("src/main/resources/typebus/"))
+      println(s"resolved: ${typebusDb}")
+      if(Files.isDirectory(typebusDb)) {
+        val walk = Files.walk(typebusDb, 1)
+        var astTree = List.empty[Node]
+        var serviceStore: ServiceStore = null
+        val it=walk.iterator()
+        it.next()  // ignore "/typebus" directory we only want the contents.
+        it.forEachRemaining{ x =>
+          if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllBytes(x))
+          else astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+        }
+        astNodeToServiceGenerator(astTree, serviceStore.methods)
+      }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
+    }else throw new FileNotFoundException(s"Not a directory: ${database}")
+
+  }
+
+  def selfCodeGen = {
+    import scala.collection.JavaConverters._
+    val uri = this.getClass.getResource("/typebus").toURI()
+    val fileSystem = FileSystems.newFileSystem(uri, scala.collection.mutable.HashMap.empty[String, String].asJava)
+    val tbPath =fileSystem.getPath("/typebus")
+    val walk = Files.walk(tbPath, 1)
+    var astTree = List.empty[Node]
+    var serviceStore: ServiceStore = null
+    val it=walk.iterator()
+    it.next()  // ignore "/typebus" directory we only want the contents.
+    it.forEachRemaining{ x =>
+      if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllBytes(x))
+      else astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+    }
+    fileSystem.close()
+    astNodeToServiceGenerator(astTree, serviceStore.methods)
+  }
+
+  def astNodeToServiceGenerator(astTree: List[Node], methods: Set[ServiceMethod])={
+    val srcList = tree2CodeSrc(astTree)
+    srcList.foreach(println)
+    val generated = srcCodeGenerator(srcList)
+    val serviceGenerator = gen.ServiceGenerator(
+      "service-name",
+      gen.Language.Scala,
+      methods = methods.map( x => ServiceMethodGenerator(Fqn(x.in), Fqn(x.out)) ),
+      classes = generated.flatMap(_._2).toSet
+    )
+    println(serviceGenerator)
+
+    serviceGenerator
+  }
 }

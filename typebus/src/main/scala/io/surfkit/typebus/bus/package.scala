@@ -104,7 +104,7 @@ package object bus {
       else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
         handleServiceEventWithMeta( (payload, publish.meta)  )
       else
-        handleEvent(payload)
+        throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")
     }
 
     def traceEvent( f: (ServiceIdentifier) => Trace, meta: EventMeta)(implicit system: ActorSystem) = super.traceEvent(ServiceIdentifier(service.serviceName, service.serviceId)) _

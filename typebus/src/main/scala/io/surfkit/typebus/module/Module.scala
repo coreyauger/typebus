@@ -12,7 +12,6 @@ import scala.reflect.ClassTag
   */
 trait Module[UserBaseType] {
 
-  var listOfPartials = List.empty[PartialFunction[_, Future[UserBaseType]]]
   var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[UserBaseType]]]
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
   var listOfImplicitsReaders = Map.empty[EventType, ByteStreamReader[UserBaseType] ]
@@ -23,25 +22,6 @@ trait Module[UserBaseType] {
   var listOfServiceImplicitsReaders = Map.empty[EventType, ByteStreamReader[TypeBus] ]
   var listOfServiceImplicitsWriters = Map.empty[EventType, ByteStreamWriter[TypeBus] ]
   var listOfServiceFunctions = List.empty[(EventType, EventType)]
-
-  /***
-    * op - internal method to register a partial function
-    * @param p - the partial function to register.
-    * @param reader - ByteStreamReader that knows how to convert Array[Byte] to a type T
-    * @param writer - ByteStreamWriter that knows how to convert a type U to Array[Byte]
-    * @tparam T - The IN service request type
-    * @tparam U - The OUT service request type
-    * @return - Unit
-    */
-  protected[this] def op[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[T, Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
-    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
-    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
-    listOfFunctions = (topic, returnType) :: listOfFunctions
-    listOfPartials = p :: listOfPartials
-    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
-    listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
-    Unit
-  }
 
   /***
     * op2 - internal method to register a partial function that also receives EventMeta
@@ -140,12 +120,6 @@ trait Module[UserBaseType] {
       case _ => false
     }
   }
-
-  protected[this] lazy val handleEvent = listOfPartials.asInstanceOf[List[PartialFunction[Any, Future[Any]]]].foldRight[PartialFunction[Any, Future[Any]] ](
-    new PartialFunction[Any, Future[Any]] {
-      def apply(x: Any) = throw new RuntimeException(s"Type not supported ${x.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
-      def isDefinedAt(x: Any ) = true
-    })( (a, b) => a.orElse(b) )
 
   protected[this] lazy val handleEventWithMeta = listOfPartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
     new PartialFunction[ (Any, EventMeta), Future[Any]] {

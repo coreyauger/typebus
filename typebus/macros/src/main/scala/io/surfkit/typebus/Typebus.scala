@@ -3,12 +3,13 @@ package io.surfkit.typebus
 import java.nio.file.{FileSystems, Files, Path, Paths}
 import java.io._
 import java.util.stream.Collectors
-
 import boopickle.Default._
-
 import scala.collection.mutable
 import scala.concurrent.Future
 import io.surfkit.typebus.event.EventMeta
+import com.typesafe.config.ConfigFactory
+import scala.collection.JavaConversions._
+import scala.util.Try
 
 /***
   * Schemacha - cheeky name for Schema wrapper
@@ -63,6 +64,8 @@ class ByteStreamReaderWriter[A](reader: ByteStreamReader[A], writer: ByteStreamW
 object Typebus extends ResourceDb{
   import scala.language.experimental.macros
   import scala.reflect.macros.blackbox
+
+  val config = ConfigFactory.load()
 
   /***
     * Helper types to create a AST of only the parts we care about
@@ -154,7 +157,7 @@ object Typebus extends ResourceDb{
     "scala.Object",
     "scala.Any"
 
-  ) // TODO: add the ability to pass in items to add to this Set
+  ) ++ Try(config.getStringList("bus.code-gen.base-types").toSet).toOption.getOrElse(Set.empty[String])
 
   val supportedContainerTypes = Set(
     "Set",

@@ -12,8 +12,6 @@ import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.actors.GatherActor
 import io.surfkit.typebus.bus.Publisher
 import io.surfkit.typebus.event._
-import org.joda.time.DateTime
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.reflect.ClassTag

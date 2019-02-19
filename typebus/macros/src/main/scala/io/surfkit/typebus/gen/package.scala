@@ -269,12 +269,12 @@ package object gen {
   }
 
   def codeGen(database: Path) = {
-    println(s"path: ${database}")
+    //println(s"path: ${database}")
     if(Files.isDirectory(database)) {
       val typebusDb =
         if (database.endsWith("typebus"))database
         else database.resolve(Paths.get("src/main/resources/typebus/"))
-      println(s"resolved: ${typebusDb}")
+      //println(s"resolved: ${typebusDb}")
       if(Files.isDirectory(typebusDb)) {
         val walk = Files.walk(typebusDb, 1)
         var astTree = List.empty[Node]
@@ -311,16 +311,16 @@ package object gen {
 
   def astNodeToServiceGenerator(astTree: List[Node], methods: Set[ServiceMethod])={
     val srcList = tree2CodeSrc(astTree)
-    srcList.foreach(println)
+    //srcList.foreach(println)
     val generated = srcCodeGenerator(srcList)
-    println(s"\n\n BLARG\n:${methods}")
+    //println(s"\n\n BLARG\n:${methods}")
     val serviceGenerator = gen.ServiceGenerator(
       "service-name",
       gen.Language.Scala,
       methods = methods.map( x => ServiceMethodGenerator(Fqn(prefix + x.in), Fqn(prefix + x.out)) ),
       classes = generated.flatMap(_._2).toSet
     )
-    println(serviceGenerator)
+    //println(serviceGenerator)
 
     serviceGenerator
   }

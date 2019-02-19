@@ -1,6 +1,11 @@
 package io.surfkit.typebus.cli
 
 import java.io.File
+import java.nio.file.Files
+import com.typesafe.config.ConfigFactory
+import scala.collection.JavaConversions._
+import scala.util.Try
+import io.surfkit.typebus._
 
 object CommandParser {
 
@@ -66,4 +71,54 @@ object CommandParser {
   def parse(args: Array[String]):Option[CmdConfig] =
     parser.parse(args, CmdConfig())
 
+
+  def runCli(busType: String = "Kafka") = {
+
+    val config = ConfigFactory.load()
+
+    @inline def defined(line: String) = {
+      line != null && line.nonEmpty
+    }
+    print("typebus> ")
+    Iterator.continually(scala.io.StdIn.readLine).takeWhile(defined(_)).foreach { line =>
+      println("cli read: " + line)
+      CommandParser.parse(line.split(' ')).foreach{
+        case cmd if cmd.command == Cmd.CodeGen =>
+          val genCmd = cmd.gen
+          if(genCmd.service != ""){
+            // TODO: how do we do this one?
+            //ZookeeperClusterSeed(system).join()
+            //new GeneratorService
+          }else if(genCmd.push){
+            // get the project to push to
+            println("push code gen...")
+            val generated = gen.selfCodeGen
+            genCmd.out.foreach { outFile =>
+              gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, outFile.getAbsolutePath.split('/').toList )
+            }
+            val pushPaths = Try(config.getStringList("bus.code-gen.push").toList).toOption.getOrElse(List.empty[String])
+            val projectDir = new java.io.File(".").toPath
+            println(s"pushPaths: ${projectDir.toAbsolutePath} ${pushPaths}")
+            pushPaths.foreach{ part =>
+              val scalaSrcPath = projectDir.resolve(part + "/src/main/scala")
+              if(Files.isDirectory(scalaSrcPath)){
+                println(s"pushing code to: ${scalaSrcPath}")
+                gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, scalaSrcPath.toAbsolutePath.toString.split('/').toList )
+              }
+            }
+          }else if(!genCmd.target.isEmpty){
+            val target = genCmd.target.get
+            val generated = gen.codeGen(target.toPath)
+            genCmd.out.foreach { outFile =>
+              gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, outFile.getAbsolutePath.split('/').toList )
+            }
+          }
+
+
+        case cmd =>
+          println(s"Unknown or unsupported command. ${cmd}")
+      }
+      print("typebus> ")
+    }
+  }
 }

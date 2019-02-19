@@ -16,9 +16,6 @@ import io.surfkit.typebus.bus.Bus
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
 import java.util.UUID
-
-import org.joda.time.DateTime
-
 import scala.util.Try
 
 trait AkkaBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams with Actor with ActorLogging {

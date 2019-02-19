@@ -7,14 +7,14 @@ import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
 import io.surfkit.typebus.bus.akka.AkkaBus
 import scala.concurrent.duration._
-
-
+import io.surfkit.typebus.cli._
+import io.surfkit.typebus.annotations.ServiceMethod
 
 class AkkaGenActor(args: Array[String]) extends Service[TypeBus]("code-gen") with AkkaBus[TypeBus] {
   import context.dispatcher
 
-  registerStream(genScalaServiceDescription("akka", List("src", "main", "scala")) _)
-  startTypeBus
+  //registerStream(genScalaServiceDescription("akka", List("src", "main", "scala")) _)
+  //startTypeBus
 
   val getServiceDescriptor = GetServiceDescriptor("")
 
@@ -31,6 +31,8 @@ class AkkaGenActor(args: Array[String]) extends Service[TypeBus]("code-gen") wit
 object Main extends App{
   implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
 
-  ZookeeperClusterSeed(system).join()
-  system.actorOf(Props(new AkkaGenActor(args)))
+  //ZookeeperClusterSeed(system).join()
+  //system.actorOf(Props(new AkkaGenActor(args)))
+
+  CommandParser.runCli("Akka")
 }

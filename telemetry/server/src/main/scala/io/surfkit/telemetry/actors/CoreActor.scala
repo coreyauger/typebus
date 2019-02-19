@@ -52,7 +52,7 @@ class CoreActor extends Service[BaseType]("core-actor") with Actor with KafkaBus
       val produce = msg.toPublishedEvent
       println(s"TO PUBLISH EVENT: ${produce}")
       // CA - filter out HearBeat (Hb) events at this level.
-      if( !msg.data.meta.eventType.endsWith(Hb.getClass.getSimpleName.replaceAllLiterally("$","") ) )
+      if( !msg.data.meta.eventType.fqn.endsWith(Hb.getClass.getSimpleName.replaceAllLiterally("$","") ) )
         userRegion ! UserActor.ShardMessage(UUID.fromString(msg.uuid), produce)
 
     case Disconnect(uuid, socketId) =>

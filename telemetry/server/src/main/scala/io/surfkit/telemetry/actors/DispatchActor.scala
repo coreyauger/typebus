@@ -10,6 +10,7 @@ import io.surfkit.telemetry.cluster.UserActor
 import io.surfkit.typebus.module.Service
 import io.surfkit.typebus.bus.kafka.KafkaBus
 import io.surfkit.typebus.event.{EventMeta, ServiceDescriptor}
+import io.surfkit.typebus.annotations.ServiceMethod
 import io.surfkit.typebus.event._
 import scala.concurrent.Future
 
@@ -33,6 +34,7 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
 
   println("Running !!!!")
 
+  @ServiceMethod
   def handleServiceDescriptor(x: ServiceDescriptor, meta: EventMeta): Future[Unit] = {
     DispatchActor.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
@@ -43,6 +45,7 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     Future.successful(Unit)
   }
 
+  @ServiceMethod
   def handleInEventTrace(x: InEventTrace, meta: EventMeta): Future[Unit] = {
     DispatchActor.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
@@ -53,6 +56,7 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     Future.successful(Unit)
   }
 
+  @ServiceMethod
   def handleOutEventTrace(x: OutEventTrace, meta: EventMeta): Future[Unit] = {
     DispatchActor.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
@@ -63,6 +67,7 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     Future.successful(Unit)
   }
 
+  @ServiceMethod
   def handleExceptionTrace(x: ExceptionTrace, meta: EventMeta): Future[Unit] = {
     DispatchActor.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
@@ -76,11 +81,6 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
   override def receive = {
     case _ =>
   }
-
-  registerStream(handleServiceDescriptor _)
-  registerStream(handleInEventTrace _)
-  registerStream(handleOutEventTrace _)
-  registerStream(handleExceptionTrace _)
 
   startTypeBus
 }

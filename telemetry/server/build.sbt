@@ -21,7 +21,7 @@ libraryDependencies ++= Seq(
   "org.squbs" %% "squbs-unicomplex" % squbsV,
   "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2",
   "io.surfkit" %% "typebus-kafka" % "0.0.5-SNAPSHOT",
-  "io.surfkit" %% "typebus-squbs" % "0.0.1-SNAPSHOT",
+  "io.surfkit" %% "typebus-squbs" % "0.0.5-SNAPSHOT",
   "com.typesafe.akka" %% "akka-cluster-sharding" % akkaV,
   "com.typesafe.akka" %% "akka-persistence-cassandra" % "0.91",
   "com.datastax.cassandra" % "cassandra-driver-core" % "3.6.0",
@@ -29,5 +29,9 @@ libraryDependencies ++= Seq(
 )
 
 mainClass in (Compile, run) := Some("org.squbs.unicomplex.Bootstrap")
+
+val paradiseVersion = "2.1.1"
+
+addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
 
 

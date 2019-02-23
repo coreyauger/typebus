@@ -133,13 +133,11 @@ trait Module[UserBaseType] {
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
 
-
   protected[this] lazy val handleServiceEventWithMeta = listOfServicePartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
     new PartialFunction[ (Any, EventMeta), Future[Any]] {
       def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
-
 
 
 }

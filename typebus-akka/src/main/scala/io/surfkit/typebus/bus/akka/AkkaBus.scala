@@ -98,7 +98,10 @@ trait AkkaBus[UserBaseType] extends Bus[UserBaseType] with AvroByteStreams with 
               writer.write(ret.asInstanceOf[TypeBus])
             }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
           )
-          event.meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
+          // RPC clients publish to the "Serivce Name" subscription, where that service then can route message back to RPC client.
+          event.meta.directReply.filterNot(_.service.service == serviceName).foreach{ rpc =>
+            publish( publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.service) )) )
+          }
           publish(publishedEvent)
         }
       }catch{

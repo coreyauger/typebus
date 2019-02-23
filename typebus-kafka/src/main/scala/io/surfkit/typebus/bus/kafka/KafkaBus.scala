@@ -124,7 +124,10 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
               writer.write(x._3.asInstanceOf[TypeBus])
             }.getOrElse(listOfImplicitsWriters(EventType.parse(retType)).write(x._3.asInstanceOf[UserBaseType]))
           )
-          x._2.meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
+          // RPC clients publish to the "Serivce Name" subscription, where that service then can route message back to RPC client.
+          x._2.meta.directReply.filterNot(_.service.service == serviceName).foreach{ rpc =>
+            publish( publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.service) )) )
+          }
           publish(publishedEvent)
         }
         system.log.debug("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
@@ -133,9 +136,9 @@ trait KafkaBus[UserBaseType] extends Bus[UserBaseType] {
       def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
     }
 
-    system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn))}")
+    system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${service.serviceName :: (listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn))}")
 
-    Consumer.committableSource(consumerSettings, Subscriptions.topics( (listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn)) :_*))
+    Consumer.committableSource(consumerSettings, Subscriptions.topics( (service.serviceName :: listOfFunctions.map(_._1.fqn) ::: listOfServiceFunctions.map(_._1.fqn)) :_*))
       .mapAsyncUnordered(4) { msg =>
         system.log.info(s"TypeBus: got msg for topic: ${msg.record.topic()}")
         val publish = service.publishedEventReader.read(msg.record.value())

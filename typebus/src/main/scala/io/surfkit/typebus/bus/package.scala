@@ -94,7 +94,7 @@ package object bus {
 
     def startTypeBus(implicit system: ActorSystem): Unit
 
-    def consume(publish: PublishedEvent) = {
+    def consume(publish: PublishedEvent)(implicit system: ActorSystem) = {
       val reader = listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(listOfImplicitsReaders(publish.meta.eventType))
       val payload = reader.read(publish.payload)
       if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
@@ -103,6 +103,8 @@ package object bus {
         handleEventWithMeta( (payload, publish.meta)  )
       else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
         handleServiceEventWithMeta( (payload, publish.meta)  )
+      else if(publish.meta.directReply.map(_.service.service == service.serviceName).getOrElse[Boolean](false))
+        handleRpcReply(publish)
       else
         throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")
     }

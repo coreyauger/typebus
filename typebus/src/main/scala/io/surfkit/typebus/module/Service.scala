@@ -69,24 +69,17 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
 
 
   /***
-    * replyToSender - target an actor for the reply of a message
-    * @param meta - EventMeta used to help with the routing
-    * @param x - The resonse of type U that needs to be sent to the actor.
-    * @param system - The akka actor system
-    * @param writer - ByteStreamWriter that knows how to convert a type U to Array[Byte]
-    * @param ex - Execution context
-    * @tparam U - The type of the response
+    * Route a message to the proper RPC client to close the Future response.
+    * @param x - rpc reply event
+    * @param system - Actor system
     */
-  def replyToSender[U <: UserBaseType](meta: EventMeta, x: U)(implicit system: ActorSystem, writer: ByteStreamWriter[U], ex: ExecutionContext) = {
-    implicit val timeout = Timeout(4 seconds)
-    val publishedEvent = PublishedEvent(
-      meta = meta.copy(
-        eventId = UUID.randomUUID.toString,
-        eventType = EventType.parse(x.getClass.getCanonicalName),
-        responseTo = Some(meta.eventId)
-      ),
-      payload = writer.write(x))
-      meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
+  def handleRpcReply( x: PublishedEvent )(implicit system: ActorSystem): Future[Unit] = {
+    import system.dispatcher
+    x.meta.directReply.filterNot(_.service.service == serviceName).map{rpc =>
+      system.actorSelection(rpc.path).resolveOne(4 seconds).map{
+        actor => actor ! x
+      }
+    }.getOrElse(Future.successful( Unit ))
   }
 
   def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(

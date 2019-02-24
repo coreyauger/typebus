@@ -25,9 +25,8 @@ object Service{
 
 /***
   * The main type for defining your service.
-  * @tparam UserBaseType - the base trait all your service types inherit from
   */
-abstract class Service[UserBaseType](val serviceName: String) extends Module[UserBaseType] with AvroByteStreams {
+abstract class Service(val serviceName: String) extends Module with AvroByteStreams {
 
   val upTime = Instant.now()
   val serviceId = UUID.randomUUID().toString
@@ -42,7 +41,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
+  def registerStream[T <: Any : ClassTag, U <: Any : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op2(funToPF2(f))
 
   /***
@@ -52,7 +51,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  def registerStream[T <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
+  def registerStream[T <: Any : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
     op2Unit(funToPF2Unit(f))
 
   /***

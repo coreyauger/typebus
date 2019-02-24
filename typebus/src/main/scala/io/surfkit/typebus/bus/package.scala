@@ -87,10 +87,9 @@ package object bus {
 
   /***
     * Bus
-    * @tparam UserBaseType
     */
-  trait Bus[UserBaseType] extends Publisher{
-    service: Service[UserBaseType] =>
+  trait Bus extends Publisher{
+    service: Service =>
 
     def startTypeBus(implicit system: ActorSystem): Unit
 

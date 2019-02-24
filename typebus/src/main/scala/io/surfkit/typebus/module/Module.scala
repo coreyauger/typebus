@@ -8,14 +8,13 @@ import scala.reflect.ClassTag
 
 /***
   * Module is the base of ALL typebus service.
-  * @tparam UserBaseType - the base trait all your service types inherit from
   */
-trait Module[UserBaseType] {
+trait Module {
 
-  var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[UserBaseType]]]
+  var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[Any]]]
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
-  var listOfImplicitsReaders = Map.empty[EventType, ByteStreamReader[UserBaseType] ]
-  var listOfImplicitsWriters = Map.empty[EventType, ByteStreamWriter[UserBaseType] ]
+  var listOfImplicitsReaders = Map.empty[EventType, ByteStreamReader[Any] ]
+  var listOfImplicitsWriters = Map.empty[EventType, ByteStreamWriter[Any] ]
   var listOfFunctions = List.empty[(EventType, EventType)]
 
   var listOfServicePartialsWithMeta = List.empty[PartialFunction[_, Future[TypeBus]]]
@@ -32,13 +31,13 @@ trait Module[UserBaseType] {
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  protected[this] def op2[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
+  protected[this] def op2[T <: Any : ClassTag, U <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
-    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
-    listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[UserBaseType]])
+    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
+    listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[Any]])
     Unit
   }
 
@@ -49,11 +48,11 @@ trait Module[UserBaseType] {
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  protected[this] def op2Unit[T <: UserBaseType : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] )  = {
+  protected[this] def op2Unit[T <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] )  = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, EventType.parse("scala.Unit")) :: listOfFunctions
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
-    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[UserBaseType]])
+    listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
     Unit
   }
 

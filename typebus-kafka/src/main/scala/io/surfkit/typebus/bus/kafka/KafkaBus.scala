@@ -52,7 +52,7 @@ class TypebusKafkaProducer(serviceId: ServiceIdentifier, system: ActorSystem, ka
   def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
       producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, publishedEventWriter.write(event)))
-      traceEvent(OutEventTrace(serviceIdentifier.service, serviceIdentifier.serviceId, event), event.meta)
+      traceEvent(OutEventTrace(serviceIdentifier, event), event.meta)
     }catch{
       case t: Throwable =>
         produceErrorReport(t, event.meta)
@@ -68,7 +68,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
   implicit val actorSystem = system
 
   override def service = sercieApi
-  val serviceDescription = service.makeServiceDescriptor(service.serviceName)
+  val serviceDescription = service.makeServiceDescriptor
   val log = system.log
   log.info(
     s"""
@@ -82,6 +82,9 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
        | bus.kafka                                        ${kafkaConfig.kafkaConfigMap}
        | bus.trace                                        ${kafkaConfig.cfg.getBoolean("bus.trace")}
        |********************************************************************************************************
+       | serviceDescription:
+       | ${serviceDescription}
+       |********************************************************************************************************
     """.stripMargin)
 
   val decider: Supervision.Decider = {
@@ -91,7 +94,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
 
   val consumerSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
     .withProperties(kafkaConfig.kafkaConfigMap)
-    .withGroupId(service.serviceName)
+    .withGroupId(service.serviceIdentifier.name)
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
   /***
@@ -127,8 +130,8 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
           }.getOrElse(service.listOfImplicitsWriters(EventType.parse(retType)).write(x._3))
         )
         // RPC clients publish to the "Serivce Name" subscription, where that service then can route message back to RPC client.
-        x._2.meta.directReply.filterNot(_.service.service == service.serviceName).foreach{ rpc =>
-          publisher.publish( publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.service) )) )
+        x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach{ rpc =>
+          publisher.publish( publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name) )) )
         }
         publisher.publish(publishedEvent)
       }
@@ -138,14 +141,14 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
     def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
   }
 
-  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${service.serviceName :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))}")
+  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))}")
 
-  Consumer.committableSource(consumerSettings, Subscriptions.topics( (service.serviceName :: service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn)) :_*))
+  Consumer.committableSource(consumerSettings, Subscriptions.topics( (service.serviceIdentifier.name :: service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn)) :_*))
     .mapAsyncUnordered(4) { msg =>
       system.log.info(s"TypeBus: got msg for topic: ${msg.record.topic()}")
       val publish = service.publishedEventReader.read(msg.record.value())
       try {
-        publisher.traceEvent(InEventTrace(service.serviceIdentifier.service, service.serviceIdentifier.serviceId, publish), publish.meta)
+        publisher.traceEvent(InEventTrace(service.serviceIdentifier, publish), publish.meta)
         consume(publish).map(x => (msg, publish, x))
       }catch{
         case t:Throwable =>

@@ -1,6 +1,7 @@
 package io.surfkit.typebus
 
 import java.time.Instant
+import java.util.UUID
 
 package object event {
 
@@ -9,9 +10,10 @@ package object event {
     */
   sealed trait TypeBus{}
 
+  final case class ServiceIdentifier(name: String, id: UUID = UUID.randomUUID) extends TypeBus
+
   trait Trace extends TypeBus{
-    def service: String
-    def serviceId: String
+    def service: ServiceIdentifier
     def event: PublishedEvent
   }
   case class ServiceException(
@@ -21,17 +23,14 @@ package object event {
   ) extends TypeBus
 
   case class InEventTrace(
-               service: String,
-               serviceId: String,
+               service: ServiceIdentifier,
                event: PublishedEvent) extends Trace
 
   case class OutEventTrace(
-                 service: String,
-                 serviceId: String,
+                 service: ServiceIdentifier,
                  event: PublishedEvent) extends Trace
   case class ExceptionTrace(
-                 service: String,
-                 serviceId: String,
+                 service: ServiceIdentifier,
                  event: PublishedEvent
                ) extends Trace
 
@@ -81,7 +80,6 @@ package object event {
     */
   case class ServiceMethod(in: InType, out: OutType) extends TypeBus
 
-  case class ServiceIdentifier(service: String, serviceId: String) extends TypeBus
 
   /***
     * ServiceDescriptor - fully describe a service

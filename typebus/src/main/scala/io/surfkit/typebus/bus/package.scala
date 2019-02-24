@@ -69,7 +69,7 @@ package object bus {
         stackTrace = sw.toString.split("\n").toSeq
       )
       traceEvent(
-        ExceptionTrace(serviceIdentifier.service, serviceIdentifier.serviceId, PublishedEvent(
+        ExceptionTrace(serviceIdentifier, PublishedEvent(
           meta = EventMeta(
             eventId = UUID.randomUUID().toString,
             source = "",
@@ -100,7 +100,7 @@ package object bus {
         service.handleEventWithMeta( (payload, publish.meta)  )
       else if(service.handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
         service.handleServiceEventWithMeta( (payload, publish.meta)  )
-      else if(publish.meta.directReply.map(_.service.service == service.serviceName).getOrElse[Boolean](false))
+      else if(publish.meta.directReply.map(_.service.name == service.serviceIdentifier.name).getOrElse[Boolean](false))
         service.handleRpcReply(publish)
       else
         throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")

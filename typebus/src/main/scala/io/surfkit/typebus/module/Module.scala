@@ -112,7 +112,7 @@ trait Module {
     * @tparam - Future[Unit] sink
     * @return - PartialFunction[ (T,EventMeta), Future[Unit]]
     */
-  protected[this] def funToPF2Unit[T : ClassTag, Future[Unit]](f: (T, EventMeta) => Future[Unit]) = new PartialFunction[ (T,EventMeta), Future[Unit]] {
+  protected[typebus] def funToPF2Unit[T : ClassTag, Future[Unit]](f: (T, EventMeta) => Future[Unit]) = new PartialFunction[ (T,EventMeta), Future[Unit]] {
     def apply(x: (T, EventMeta) ) = f(x._1.asInstanceOf[T], x._2)
     def isDefinedAt(x: (T, EventMeta) ) = x._1 match{
       case _: T => true
@@ -120,19 +120,19 @@ trait Module {
     }
   }
 
-  protected[this] lazy val handleEventWithMeta = listOfPartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
+  protected[typebus] lazy val handleEventWithMeta = listOfPartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
     new PartialFunction[ (Any, EventMeta), Future[Any]] {
       def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
 
-  protected[this] lazy val handleEventWithMetaUnit = listOfPartialsWithMetaUnit.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Unit]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Unit]] ](
+  protected[typebus] lazy val handleEventWithMetaUnit = listOfPartialsWithMetaUnit.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Unit]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Unit]] ](
     new PartialFunction[ (Any, EventMeta), Future[Unit]] {
       def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false
     })( (a, b) => a.orElse(b) )
 
-  protected[this] lazy val handleServiceEventWithMeta = listOfServicePartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
+  protected[typebus] lazy val handleServiceEventWithMeta = listOfServicePartialsWithMeta.asInstanceOf[List[PartialFunction[ (Any, EventMeta), Future[Any]]]].foldRight[PartialFunction[ (Any, EventMeta), Future[Any]] ](
     new PartialFunction[ (Any, EventMeta), Future[Any]] {
       def apply(x: (Any, EventMeta)) = throw new RuntimeException(s"Type not supported ${x._1.getClass.getCanonicalName}") // TODO: This needs to fail when we don't have the implicit
       def isDefinedAt(x: (Any, EventMeta) ) = false

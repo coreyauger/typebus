@@ -5,7 +5,6 @@ import akka.cluster.seed.ZookeeperClusterSeed
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.module.Service
 import io.surfkit.typebus.{AvroByteStreams, Typebus}
-import io.surfkit.typebus.bus.kafka.KafkaBus
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 import io.surfkit.typebus.cli._
@@ -19,8 +18,9 @@ import java.nio.file.{Files, Path, Paths}
 object Main extends App {
 
   implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+  /*
 
-  private class GeneratorService extends Service[TypeBus]("code-gen") with KafkaBus[TypeBus] with AvroByteStreams {
+  private class GeneratorService extends Service("code-gen") with KafkaBus[TypeBus] with AvroByteStreams {
 
     // TODO: gen from bus..
     //registerStream(genScalaServiceDescription("Kafka", List("src", "main", "scala")) _)
@@ -33,9 +33,20 @@ object Main extends App {
       publish(getServiceDescriptor)
     }
   }
+  */
 
   // only want to activate and join cluster in certain cases
   //ZookeeperClusterSeed(system).join()
+
+  /*
+  val seriviceIdentity = SeriviceIdentity("")
+
+  TypebusApplication(
+    system,
+    seriviceIdentity,
+    new TypebusKafkaProducer(seriviceIdentity, system),
+  )
+  */
 
   CommandParser.runCli("Kafka")
 

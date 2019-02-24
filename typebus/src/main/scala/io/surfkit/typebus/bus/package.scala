@@ -19,7 +19,7 @@ package object bus {
   /***
     *  Publisher
     */
-  trait Publisher extends AvroByteStreams{
+  abstract class Publisher extends AvroByteStreams{
     def publish[T : ClassTag](obj: T)(implicit writer: ByteStreamWriter[T], system: ActorSystem): Unit =
       publish(PublishedEvent(
         meta = EventMeta(
@@ -31,19 +31,19 @@ package object bus {
         payload = writer.write(obj)
       ))
 
+    def serviceIdentifier: ServiceIdentifier
     def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit
     def busActor(implicit system: ActorSystem): ActorRef
 
     val trace = ConfigFactory.load.getBoolean("bus.trace")
 
-    def traceEvent(serviceIdentifier: ServiceIdentifier)( f: (ServiceIdentifier) => Trace, meta: EventMeta)(implicit system: ActorSystem): Unit = {
+    def traceEvent( event: Trace, meta: EventMeta)(implicit system: ActorSystem): Unit = {
       if(  // CA - well this is lame :(
         (trace || meta.trace) &&
           !meta.eventType.fqn.endsWith(InEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
           !meta.eventType.fqn.endsWith(OutEventTrace.getClass.getSimpleName.replaceAllLiterally("$","")) &&
           !meta.eventType.fqn.endsWith(ExceptionTrace.getClass.getSimpleName.replaceAllLiterally("$",""))
       ){
-        val event = f( serviceIdentifier)
         busActor ! PublishedEvent(
           meta = meta.copy(
             eventId = UUID.randomUUID().toString,
@@ -61,15 +61,15 @@ package object bus {
     }
 
 
-    def produceErrorReport(serviceIdentifier: ServiceIdentifier)(t: Throwable, meta: EventMeta, msg: String = "typebus caught exception")(implicit system: ActorSystem) = {
+    def produceErrorReport(t: Throwable, meta: EventMeta, msg: String = "typebus caught exception")(implicit system: ActorSystem) = {
       val sw = new StringWriter
       t.printStackTrace(new PrintWriter(sw))
       val ex = ServiceException(
         message = msg,
         stackTrace = sw.toString.split("\n").toSeq
       )
-      traceEvent(serviceIdentifier)( { s: ServiceIdentifier =>
-        ExceptionTrace(s.service, s.serviceId, PublishedEvent(
+      traceEvent(
+        ExceptionTrace(serviceIdentifier.service, serviceIdentifier.serviceId, PublishedEvent(
           meta = EventMeta(
             eventId = UUID.randomUUID().toString,
             source = "",
@@ -78,37 +78,42 @@ package object bus {
             trace = true
           ),
           payload = ServiceExceptionWriter.write(ex)
-        ))
-      }, meta)
+        )), meta)
       system.log.error(msg,t)
     }
   }
 
 
   /***
-    * Bus
+    * Consumer
     */
-  trait Bus extends Publisher{
-    service: Service =>
-
-    def startTypeBus(implicit system: ActorSystem): Unit
+  trait Consumer extends AvroByteStreams{
+    def service: Service
+    //def startTypeBus(implicit system: ActorSystem): Unit
 
     def consume(publish: PublishedEvent)(implicit system: ActorSystem) = {
-      val reader = listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(listOfImplicitsReaders(publish.meta.eventType))
+      val reader = service.listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(service.listOfImplicitsReaders(publish.meta.eventType))
       val payload = reader.read(publish.payload)
-      if(handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
-        handleEventWithMetaUnit( (payload, publish.meta) )
-      else if(handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-        handleEventWithMeta( (payload, publish.meta)  )
-      else if(handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-        handleServiceEventWithMeta( (payload, publish.meta)  )
+      if(service.handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
+        service.handleEventWithMetaUnit( (payload, publish.meta) )
+      else if(service.handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
+        service.handleEventWithMeta( (payload, publish.meta)  )
+      else if(service.handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
+        service.handleServiceEventWithMeta( (payload, publish.meta)  )
       else if(publish.meta.directReply.map(_.service.service == service.serviceName).getOrElse[Boolean](false))
-        handleRpcReply(publish)
+        service.handleRpcReply(publish)
       else
         throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")
     }
 
-    def traceEvent( f: (ServiceIdentifier) => Trace, meta: EventMeta)(implicit system: ActorSystem) = super.traceEvent(ServiceIdentifier(service.serviceName, service.serviceId)) _
-    def produceErrorReport(t: Throwable, meta: EventMeta, msg: String)(implicit system: ActorSystem) = super.produceErrorReport(ServiceIdentifier(service.serviceName, service.serviceId)) _
   }
+
+
+  case class TypebusApplication(
+               system: ActorSystem,
+               serviceId: ServiceIdentifier,
+               publisher: Publisher,
+               service: Service,
+               consumer: Consumer
+             )
 }

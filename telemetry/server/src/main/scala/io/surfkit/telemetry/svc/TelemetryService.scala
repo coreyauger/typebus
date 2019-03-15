@@ -1,5 +1,4 @@
-package io.surfkit.telemetry.actors
-
+package io.surfkit.telemetry.svc
 
 import java.util.UUID
 
@@ -8,35 +7,35 @@ import akka.actor._
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import io.surfkit.telemetry.cluster.UserActor
 import io.surfkit.typebus.module.Service
-import io.surfkit.typebus.bus.kafka.KafkaBus
-import io.surfkit.typebus.event.{EventMeta, ServiceDescriptor}
+import io.surfkit.typebus.bus.Publisher
 import io.surfkit.typebus.annotations.ServiceMethod
 import io.surfkit.typebus.event._
+
 import scala.concurrent.Future
 
-object DispatchActor{
+
+
+object TelemetryService{
   // CA - HACK: this is a pretty lame hack to broadcast all the trace messages..
   var adminUserIds = Set.empty[String]
 }
 
-class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLogging with KafkaBus[Any] with AvroByteStreams{
-  implicit val system = context.system
-  import system.dispatcher
+class TelemetryService(serviceIdentifier: ServiceIdentifier, publisher: Publisher, sys: ActorSystem)
+  extends Service(serviceIdentifier,publisher) with AvroByteStreams{
+  implicit val system = sys
 
-  val bus = busActor
-  val userRegion = ClusterSharding(system). start(
+  val bus = publisher.busActor
+  val userRegion = ClusterSharding(system).start(
     typeName = "UserActor",
     entityProps = UserActor.props(bus),
-    settings = ClusterShardingSettings(system).withRole(serviceName),
+    settings = ClusterShardingSettings(system).withRole(serviceIdentifier.name),
     extractEntityId = UserActor.idExtractor,
-    extractShardId = UserActor.shardResolver,
+    extractShardId = UserActor.shardResolver
   )
-
-  println("Running !!!!")
 
   @ServiceMethod
   def handleServiceDescriptor(x: ServiceDescriptor, meta: EventMeta): Future[Unit] = {
-    DispatchActor.adminUserIds.foreach{ uid =>
+    TelemetryService.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
         meta = meta.copy(eventId = UUID.randomUUID().toString),
         payload = serviceDescriptorWriter.write(x)
@@ -44,10 +43,11 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     }
     Future.successful(Unit)
   }
+  registerStream(handleServiceDescriptor _)
 
   @ServiceMethod
   def handleInEventTrace(x: InEventTrace, meta: EventMeta): Future[Unit] = {
-    DispatchActor.adminUserIds.foreach{ uid =>
+    TelemetryService.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
         meta = meta.copy(eventId = UUID.randomUUID().toString),
         payload = InEventTraceWriter.write(x)
@@ -55,10 +55,11 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     }
     Future.successful(Unit)
   }
+  registerStream(handleInEventTrace _)
 
   @ServiceMethod
   def handleOutEventTrace(x: OutEventTrace, meta: EventMeta): Future[Unit] = {
-    DispatchActor.adminUserIds.foreach{ uid =>
+    TelemetryService.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
         meta = meta.copy(eventId = UUID.randomUUID().toString),
         payload = OutEventTraceWriter.write(x)
@@ -66,10 +67,11 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     }
     Future.successful(Unit)
   }
+  registerStream(handleOutEventTrace _)
 
   @ServiceMethod
   def handleExceptionTrace(x: ExceptionTrace, meta: EventMeta): Future[Unit] = {
-    DispatchActor.adminUserIds.foreach{ uid =>
+    TelemetryService.adminUserIds.foreach{ uid =>
       userRegion ! UserActor.ShardMessage(UUID.fromString(uid), SocketEvent(
         meta = meta.copy(eventId = UUID.randomUUID().toString),
         payload = ExceptionTraceWriter.write(x)
@@ -77,11 +79,7 @@ class DispatchActor extends Service[Any]("telemetry") with Actor with ActorLoggi
     }
     Future.successful(Unit)
   }
+  registerStream(handleExceptionTrace _)
 
-  override def receive = {
-    case _ =>
-  }
-
-  startTypeBus
 }
 

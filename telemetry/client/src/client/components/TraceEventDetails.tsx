@@ -91,8 +91,9 @@ class TraceEventDetails extends React.Component<Props & WithStyles<typeof styles
     if(!trace)return <div className={this.props.classes.root}></div>;
 
     console.log("schemaz", this.props.store.serviceStore.schema)
-    console.log("lookup: ", trace.event.meta.eventType)
-    const schema = this.props.store.serviceStore.schema[trace.event.meta.eventType]
+    const eventType = trace.event.meta.eventType.replace(".package.",".")
+    console.log("lookup: "+eventType, this.props.store.serviceStore.schema[eventType])
+    const schema = this.props.store.serviceStore.schema[eventType]
     const payload = schema.fromBuffer( Buffer.from(trace.event.payload) )
     
     const  classes = this.props.classes;
@@ -111,7 +112,7 @@ class TraceEventDetails extends React.Component<Props & WithStyles<typeof styles
               <MoreVertIcon />
             </IconButton>
           }
-          title={trace.event.meta.eventType}
+          title={eventType}
           subheader={trace.event.meta.occurredAt}
         />
              
@@ -141,7 +142,7 @@ class TraceEventDetails extends React.Component<Props & WithStyles<typeof styles
               mode="javascript"
               theme="github"            
               setOptions={ {readOnly: true} }
-              name={trace.event.meta.eventType}
+              name={eventType}
               editorProps={{$blockScrolling: true}}
               value={(this.state.tab == 0 ? JSON.stringify(payload,null,'\t') : JSON.stringify(JSON.parse( '{ "TODO":1 }' ),null,'\t') )}
             />    

@@ -147,7 +147,7 @@ export class TypebusSocket{
                 eventType: eventType,
                 source: "",
                 correlationId: new Date().getTime() + "",
-                trace: false,
+                trace: true,
                 directReply: null,            
                 userId: this.userId,
                 socketId: null, 

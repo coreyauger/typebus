@@ -19,8 +19,6 @@ object Main extends App {
 
   // only want to activate and join cluster in certain cases
   //ZookeeperClusterSeed(system).join()
-
-
   lazy val producer = new TypebusKafkaProducer(serviceIdentity, system)
   lazy val service = new Service(serviceIdentity, producer){
     import system.dispatcher
@@ -37,6 +35,7 @@ object Main extends App {
   }
   lazy val consumer = new TypebusKafkaConsumer(service, producer, system)
 
+  println("\n\n***********\n\n")
   TypebusApplication
   (
     system,

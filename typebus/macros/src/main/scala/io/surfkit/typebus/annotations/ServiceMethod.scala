@@ -26,8 +26,8 @@ object ServiceMethod extends ResourceDb{
     import c.universe._
     val result =
       annottees.map(_.tree).toList match {
-        //case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }" :: Nil =>
-        case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType]" :: Nil =>
+        case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }" :: Nil =>
+        //case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType]{..$body}" :: Nil =>
           // https://stackoverflow.com/questions/19379436/cant-access-parents-members-while-dealing-with-macro-annotations
           val retTpe = c.typecheck(q"(??? : $returnType)").tpe
           val argChild = arg.children.head
@@ -38,9 +38,9 @@ object ServiceMethod extends ResourceDb{
           methods += ServiceMethod(argTpe.typeSymbol.fullName, retTpe.typeSymbol.fullName)
           val servicePath = databaseTablePath(databaseTableName)
           Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)))
-          q"""$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType]"""
+          q"""$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }"""
 
-        case _ => c.abort(c.enclosingPosition, "Annotation @ServiceMethod can be used only with methods of the form (T, EventMeta) => Future[U]")
+        case _ => c.abort(c.enclosingPosition, s"Annotation @ServiceMethod can be used only with methods of the form (T, EventMeta) => Future[U] instead of: ${annottees.map(_.tree).toList}")
       }
     c.Expr[Any](result)
   }

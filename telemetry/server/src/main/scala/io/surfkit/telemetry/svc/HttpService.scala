@@ -21,6 +21,7 @@ import headers._
 import HttpMethods._
 import akka.cluster.sharding.ClusterSharding
 import io.surfkit.typebus.AvroByteStreams
+import io.surfkit.typebus.bus.kafka.TypebusKafkaProducer
 import io.surfkit.typebus.event._
 
 object ActorPaths {
@@ -48,7 +49,9 @@ class HttpService extends RouteDefinition with AvroByteStreams {
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
   implicit val timeout = Timeout(10 seconds)
-  val coreActor = Await.result(system.actorSelection(ActorPaths.coreActorPath).resolveOne(), timeout.duration)
+  //val coreActor = Await.result(system.actorSelection(ActorPaths.coreActorPath).resolveOne(), timeout.duration)
+  lazy val producer = new TypebusKafkaProducer(ServiceIdentifier("websocket"), system)
+  val coreActor = context.actorOf(Props(new CoreActor(producer)))
 
   val wwwPath = config.getString("www.base-url")
   // If wwwPath not found on fs, we force useResourceDir to true

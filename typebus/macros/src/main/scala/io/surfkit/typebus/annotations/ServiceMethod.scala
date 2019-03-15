@@ -27,22 +27,20 @@ object ServiceMethod extends ResourceDb{
     val result =
       annottees.map(_.tree).toList match {
         case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }" :: Nil =>
+        //case q"$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType]{..$body}" :: Nil =>
           // https://stackoverflow.com/questions/19379436/cant-access-parents-members-while-dealing-with-macro-annotations
-          val retTpe = c.typeCheck(q"(??? : $returnType)").tpe
+          val retTpe = c.typecheck(q"(??? : $returnType)").tpe
           val argChild = arg.children.head
-          val argTpe = c.typeCheck(q"(??? : $argChild)").tpe
+          val argTpe = c.typecheck(q"(??? : $argChild)").tpe
           //println(s"retTpe:${retTpe}  ${retTpe.typeSymbol.fullName}")
           //println(s"argTpe:${argTpe}  ${argTpe.typeSymbol.fullName}")
 
           methods += ServiceMethod(argTpe.typeSymbol.fullName, retTpe.typeSymbol.fullName)
           val servicePath = databaseTablePath(databaseTableName)
           Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)))
+          q"""$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }"""
 
-          //println(s"\n\nService methode: ${methodName}[$tpes]($arg): ${returnType} ${returnType.isType}      ${arg.children.head.tpe} ${arg.children.head.symbol} ${arg.children.head.isType} ${arg.children.head.isTerm} ${arg.children}")
-          q"""$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] =  {..$body}
-          registerStream( $methodName _ )
-          """
-        case _ => c.abort(c.enclosingPosition, "Annotation @ServiceMethod can be used only with methods of the form (T, EventMeta) => Future[U]")
+        case _ => c.abort(c.enclosingPosition, s"Annotation @ServiceMethod can be used only with methods of the form (T, EventMeta) => Future[U] instead of: ${annottees.map(_.tree).toList}")
       }
     c.Expr[Any](result)
   }

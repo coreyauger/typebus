@@ -2,15 +2,17 @@ package io.surfkit.telemetry.actors
 
 import akka.actor._
 import java.util.UUID
+
 import akka.cluster.sharding.ClusterSharding
 import akka.util.Timeout
+
 import scala.concurrent.duration._
 import io.surfkit.telemetry.cluster.UserActor
-import io.surfkit.telemetry.data.BaseType
-import io.surfkit.typebus.bus.kafka.KafkaBus
 import io.surfkit.typebus.event._
-import io.surfkit.typebus.module.Service
 import java.time.Instant
+
+import io.surfkit.telemetry.svc.TelemetryService
+import io.surfkit.typebus.bus.Publisher
 object CoreActor {
 
   sealed trait Socket
@@ -23,17 +25,16 @@ object CoreActor {
         occurredAt = Instant.now()
       ),
       payload = data.payload)
-
   }
 }
 
-class CoreActor extends Service[BaseType]("core-actor") with Actor with KafkaBus[BaseType] with ActorLogging{
+class CoreActor(publisher: Publisher) extends Actor with ActorLogging{
   implicit val system = context.system
   var subscriberToUserId = Map.empty[ActorRef, String]
   var socketIdToSubscriber = Map.empty[UUID, ActorRef]  // HACK: way to handle Disconnect faster then "actor.watch"
   import CoreActor._
 
-  val bus = busActor
+  val bus = publisher.busActor
 
   implicit val timeout = Timeout(10 seconds)
 
@@ -42,7 +43,7 @@ class CoreActor extends Service[BaseType]("core-actor") with Actor with KafkaBus
   override def receive: Receive = {
     case Connect(userid, socketId, subscriber, token) =>
       context.watch(subscriber)
-      DispatchActor.adminUserIds += userid   // HACK: FIXME:
+      TelemetryService.adminUserIds += userid   // HACK: FIXME:
       subscriberToUserId += subscriber -> userid
       socketIdToSubscriber += socketId -> subscriber
       userRegion ! UserActor.ShardMessage(UUID.fromString(userid), UserActor.Connect(socketId, subscriber))

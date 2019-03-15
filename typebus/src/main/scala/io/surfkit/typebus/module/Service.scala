@@ -7,6 +7,9 @@ import akka.util.Timeout
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
+
+import io.surfkit.typebus.bus.Publisher
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -25,13 +28,10 @@ object Service{
 
 /***
   * The main type for defining your service.
-  * @tparam UserBaseType - the base trait all your service types inherit from
   */
-abstract class Service[UserBaseType](val serviceName: String) extends Module[UserBaseType] with AvroByteStreams {
+abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publisher) extends Module with AvroByteStreams {
 
   val upTime = Instant.now()
-  val serviceId = UUID.randomUUID().toString
-  val serviceIdentifier = ServiceIdentifier(serviceName, serviceId)
 
   /***
     * registerStream - register a service level function that will also receive EventMeta
@@ -42,7 +42,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerStream[T <: UserBaseType : ClassTag, U <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
+  def registerStream[T <: Any : ClassTag, U <: Any : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
     op2(funToPF2(f))
 
   /***
@@ -52,7 +52,7 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  def registerStream[T <: UserBaseType : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
+  def registerStream[T <: Any : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
     op2Unit(funToPF2Unit(f))
 
   /***
@@ -75,15 +75,15 @@ abstract class Service[UserBaseType](val serviceName: String) extends Module[Use
     */
   def handleRpcReply( x: PublishedEvent )(implicit system: ActorSystem): Future[Unit] = {
     import system.dispatcher
-    x.meta.directReply.filterNot(_.service.service == serviceName).map{rpc =>
+    x.meta.directReply.filterNot(_.service.name == serviceIdentifier.name).map{rpc =>
       system.actorSelection(rpc.path).resolveOne(4 seconds).map{
         actor => actor ! x
       }
     }.getOrElse(Future.successful( Unit ))
   }
 
-  def makeServiceDescriptor( serviceName: String ) = ServiceDescriptor(
-    service = ServiceIdentifier(serviceName, serviceId),
+  def makeServiceDescriptor = ServiceDescriptor(
+    service = serviceIdentifier,
     upTime = upTime,
     serviceMethods = listOfFunctions.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>

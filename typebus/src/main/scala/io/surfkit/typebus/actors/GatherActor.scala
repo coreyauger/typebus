@@ -67,12 +67,10 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
           payload = writer.write(msg.data)
         )
         producer.publish(outEvent)
-        producer.traceEvent(serviceIdentifier)( { serviceId: ServiceIdentifier =>
-          OutEventTrace(serviceId.service, serviceId.serviceId, outEvent)
-        }, outEvent.meta)
+        producer.traceEvent(OutEventTrace(producer.serviceIdentifier, outEvent), outEvent.meta)
       }catch{
         case t:Exception =>
-          producer.produceErrorReport(serviceIdentifier)(t,meta)
+          producer.produceErrorReport(t,meta)
           cancel.cancel()
           context.stop(self)
       }
@@ -82,12 +80,10 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
       try{
         val responsePayload = reader.read(x.payload)
         replyTo ! responsePayload
-        producer.traceEvent(serviceIdentifier)( { serviceId: ServiceIdentifier =>
-          InEventTrace(serviceId.service, serviceId.serviceId, x)
-        }, x.meta)
+        producer.traceEvent(InEventTrace(producer.serviceIdentifier, x), x.meta)
       }catch{
         case t: Throwable =>
-          producer.produceErrorReport(serviceIdentifier)(t, x.meta)
+          producer.produceErrorReport(t, x.meta)
       }finally {
         cancel.cancel()
         context.stop(self)

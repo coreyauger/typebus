@@ -32,7 +32,8 @@ class ServiceStore {
         this.services.push(s)
         let updates = {}
         Object.keys(s.types).map(x => s.types[x]).forEach( x => {
-            updates[x.fqn] = JSON.parse(x.schema) as RecordType         
+            console.log("adding FQN: " + x.fqn)
+            updates[x.fqn] = avro.Type.forSchema(JSON.parse(x.schema)) as RecordType         
         })
         this.schema = {...this.schema, ...updates}
     }

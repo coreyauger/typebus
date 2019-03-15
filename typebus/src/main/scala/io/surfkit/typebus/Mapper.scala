@@ -74,6 +74,8 @@ trait AvroByteStreams{
   implicit val publishedEventWriter = new AvroByteStreamWriter[PublishedEvent]
   implicit val socketEventReader = new AvroByteStreamReader[SocketEvent]
   implicit val socketEventWriter = new AvroByteStreamWriter[SocketEvent]
+  implicit val serviceIdentifierWriter = new AvroByteStreamWriter[ServiceIdentifier]
+  implicit val serviceIdentifierReader = new AvroByteStreamReader[ServiceIdentifier]
   implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
   implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]

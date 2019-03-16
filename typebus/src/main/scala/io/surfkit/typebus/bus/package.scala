@@ -7,14 +7,43 @@ import java.util.UUID
 import akka.actor.{ActorRef, ActorSystem}
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.event._
-import io.surfkit.typebus.gen._
 import io.surfkit.typebus.module.Service
 
 import scala.concurrent.Future
+import scala.concurrent.duration._
 import scala.reflect.ClassTag
+import scala.util.Try
 
 package object bus {
 
+  trait RetryBackoff
+  object RetryBackoff{
+    case object None extends RetryBackoff
+    case object Linear extends RetryBackoff
+    case object Exponential extends RetryBackoff
+  }
+
+  case class RetryPolicy(numRetry: Int, delay: FiniteDuration, backoff: RetryBackoff)
+  object RetryPolicy{
+    val Fail = RetryPolicy(0, 0 seconds, RetryBackoff.None)
+  }
+
+
+  trait StreamBuilder[T, U]{
+    var partitionKey: Option[U => String] = None
+    var retry: Option[PartialFunction[Throwable, RetryPolicy]] = None
+
+    def withPartitionKey(f: U => String): StreamBuilder[T, U] = {
+      partitionKey = Some(f)
+      this
+    }
+    def retryPolicy(pf: PartialFunction[Throwable, RetryPolicy]): StreamBuilder[T, U] = {
+      retry = Some(pf)
+      this
+    }
+    def untyped(x: Any): Option[String] =
+      Try( partitionKey.map(_.apply(x.asInstanceOf[U]) ) ).toOption.flatten
+  }
 
   /***
     *  Publisher

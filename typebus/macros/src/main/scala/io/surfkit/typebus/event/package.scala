@@ -113,7 +113,7 @@ package object event {
     * @param source - address of actor emitting the event
     * @param correlationId - id to correlate events
     * @param directReply - used by RPC actor and generated clients
-    * @param userId - user id to associate this event with
+    * @param key - the key to use for kafka partition
     * @param socketId - web/tcp socket identifier
     * @param responseTo - the event UUID this is response to
     * @param extra - additional developer generated meta
@@ -124,7 +124,7 @@ package object event {
                        correlationId: Option[String],
                        trace: Boolean = false,
                        directReply: Option[RpcClient] = None,
-                       userId: Option[String] = None,
+                       key: Option[String] = None,
                        socketId: Option[String] = None,
                        responseTo: Option[String] = None,
                        extra: Map[String, String] = Map.empty,
@@ -149,6 +149,8 @@ package object event {
                              meta: EventMeta,
                              payload: Array[Byte]
                               ) extends TypeBus
+
+  final case class Recoverable(cause: Throwable) extends TypeBus
 
   final case class Hb(ts: Long) extends TypeBus
 

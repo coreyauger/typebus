@@ -115,7 +115,7 @@ class UserActor(bus: ActorRef) extends Actor with ActorLogging with Serializable
         case Some(eventId) => // CA - you could look up event id to find "which" http hook to send down. Since this is WS we don't care.
             sendDownSocket(SocketEvent(meta=x.meta, payload = x.payload), x.meta.socketId)
         case None =>
-          bus ! x.copy(meta = x.meta.copy(source = clusterPath, userId = Some(userId.toString) ) )
+          bus ! x.copy(meta = x.meta.copy(source = clusterPath, extra = Map("user" -> userId.toString) ) )
       }
     case x: SocketEvent =>
       log.info(s"SENDING DOWN SOCKET: ${x}")

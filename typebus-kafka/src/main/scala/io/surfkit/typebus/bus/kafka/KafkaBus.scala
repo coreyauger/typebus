@@ -121,15 +121,17 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
     def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
       system.log.debug("******** TypeBus: replyAndCommit")
       system.log.debug(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
-      system.log.debug(s"type: ${x._3.getClass.getCanonicalName}")
+      val retType = x._3.getClass.getCanonicalName
+      system.log.debug(s"replyAndCommit for type: ${retType}")
+      val eventId = UUID.randomUUID.toString
       if(x._3 != Unit) {
         implicit val timeout = Timeout(4 seconds)
-        val retType = x._3.getClass.getCanonicalName
+
         val sb = service.streamBuilderMap(EventType.parse(retType))
         val partitionKey = sb.partitionKey.flatMap(_ => sb.untyped(x._3) )   // FIXME: this untyped bit sux
         val publishedEvent = PublishedEvent(
           meta = x._2.meta.copy(
-            eventId = UUID.randomUUID.toString,
+            eventId = eventId,
             eventType = EventType.parse(x._3.getClass.getCanonicalName),
             responseTo = Some(x._2.meta.eventId),
             key = partitionKey,
@@ -145,13 +147,13 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
         }
         publisher.publish(publishedEvent)
       }
-      system.log.debug("committableOffset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+      system.log.debug(s"typebus kafka commit offset for event: ${retType} with eventId: ${}")
       x._1.committableOffset.commitScaladsl()
     }
     def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
   }
 
-  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))}")
+  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))).mkString("\n")}")
 
   val bufferSize = 16 // TODO: make this configurable
   val parrallelism = 4 // TODO: make config

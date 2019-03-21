@@ -37,7 +37,7 @@ package object bus {
       partitionKey = Some(f)
       this
     }
-    def retryPolicy(pf: PartialFunction[Throwable, RetryPolicy]): StreamBuilder[T, U] = {
+    def withRetryPolicy(pf: PartialFunction[Throwable, RetryPolicy]): StreamBuilder[T, U] = {
       retry = Some(pf)
       this
     }

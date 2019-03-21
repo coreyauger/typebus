@@ -8,7 +8,7 @@ import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import java.util.UUID
 
-import io.surfkit.typebus.bus.Publisher
+import io.surfkit.typebus.bus.{Publisher, StreamBuilder}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
@@ -42,7 +42,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerStream[T <: Any : ClassTag, U <: Any : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
+  def registerStream[T <: Any : ClassTag, U <: Any : ClassTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
     op2(funToPF2(f))
 
   /***
@@ -52,7 +52,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  def registerStream[T <: Any : ClassTag](f:  (T, EventMeta) => Future[Unit])  (implicit reader: ByteStreamReader[T]) =
+  def registerStream[T <: Any : ClassTag](f:  (T, EventMeta) => Future[Unit]) (implicit reader: ByteStreamReader[T]): StreamBuilder[T, Unit] =
     op2Unit(funToPF2Unit(f))
 
   /***
@@ -64,7 +64,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerServiceStream[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](f:  (T, EventMeta) => Future[U])  (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]) =
+  def registerServiceStream[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
     op2Service(funToPF2(f))
 
 

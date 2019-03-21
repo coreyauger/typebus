@@ -1,5 +1,6 @@
 package io.surfkit.typebus.module
 
+import io.surfkit.typebus.bus.StreamBuilder
 import io.surfkit.typebus.{ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.event._
 
@@ -22,6 +23,8 @@ trait Module {
   var listOfServiceImplicitsWriters = Map.empty[EventType, ByteStreamWriter[TypeBus] ]
   var listOfServiceFunctions = List.empty[(EventType, EventType)]
 
+  var streamBuilderMap = Map.empty[EventType, StreamBuilder[_, _]]
+
   /***
     * op2 - internal method to register a partial function that also receives EventMeta
     * @param p - the partial function to register.
@@ -31,14 +34,17 @@ trait Module {
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  protected[this] def op2[T <: Any : ClassTag, U <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
+  protected[this] def op2[T <: Any : ClassTag, U <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, returnType) :: listOfFunctions
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[Any]])
-    Unit
+    val sb = new StreamBuilder[T, U] {}
+    streamBuilderMap += topic -> sb
+    streamBuilderMap += returnType -> sb
+    sb
   }
 
   /***
@@ -48,12 +54,14 @@ trait Module {
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  protected[this] def op2Unit[T <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] )  = {
+  protected[this] def op2Unit[T <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] ): StreamBuilder[T, Unit]  = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     listOfFunctions = (topic, EventType.parse("scala.Unit")) :: listOfFunctions
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
-    Unit
+    val sb = new StreamBuilder[T, Unit] {}
+    streamBuilderMap += topic -> sb
+    sb
   }
 
   /***
@@ -65,14 +73,17 @@ trait Module {
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  protected[this] def op2Service[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] )  = {
+  protected[this] def op2Service[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
     listOfServiceFunctions = (topic, returnType) :: listOfServiceFunctions
     listOfServicePartialsWithMeta = p :: listOfServicePartialsWithMeta
     listOfServiceImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[TypeBus]])
     listOfServiceImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[TypeBus]])
-    Unit
+    val sb = new StreamBuilder[T, U] {}
+    streamBuilderMap += topic -> sb
+    streamBuilderMap += returnType -> sb
+    sb
   }
 
   /***

@@ -1,4 +1,4 @@
-package io.surfkit.typebus.bus.kafka
+package io.surfkit.typebus.bus.testkit
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.util.Timeout

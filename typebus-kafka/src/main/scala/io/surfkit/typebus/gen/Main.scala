@@ -1,7 +1,6 @@
 package io.surfkit.typebus.gen
 
 import akka.actor.ActorSystem
-import akka.cluster.seed.ZookeeperClusterSeed
 import io.surfkit.typebus.module.Service
 import io.surfkit.typebus.event.{GetServiceDescriptor, ServiceIdentifier}
 import io.surfkit.typebus.cli._

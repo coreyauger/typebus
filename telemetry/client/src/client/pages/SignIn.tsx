@@ -82,7 +82,7 @@ function SignIn(props) {
             />
             <Button
               type="submit"
-              fullWidth
+              variant="fullWidth"
               variant="contained"
               color="primary"
               className={classes.submit}

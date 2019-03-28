@@ -94,6 +94,7 @@ class TraceEventDetails extends React.Component<Props & WithStyles<typeof styles
     const eventType = trace.event.meta.eventType.replace(".package.",".")
     console.log("lookup: "+eventType, this.props.store.serviceStore.schema[eventType])
     const schema = this.props.store.serviceStore.schema[eventType]
+    console.log("schema["+eventType+"]", schema)
     const payload = schema.fromBuffer( Buffer.from(trace.event.payload) )
     
     const  classes = this.props.classes;
@@ -129,7 +130,7 @@ class TraceEventDetails extends React.Component<Props & WithStyles<typeof styles
             onChange={this.handleTabChange}
             indicatorColor="primary"
             textColor="primary"
-            fullWidth
+            variant="fullWidth"
           >
             <Tab label="json event" />
             <Tab label="avro schema" />            

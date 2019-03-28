@@ -33,8 +33,7 @@ class UserActor(bus: ActorRef) extends Actor with ActorLogging with Serializable
   import ShardRegion.Passivate
   import io.surfkit.typebus.cluster.Actor.RichPartial
 
-  var queue = new scala.collection.mutable.Queue[UserActor.ShardMessage]()
-  var userId: UUID = null
+  var userId: UUID = UUID.fromString(self.path.name)
   var sources = Map.empty[UUID, ActorRef]
   var numConnects = 1
   var numDisconnects = 0
@@ -44,48 +43,12 @@ class UserActor(bus: ActorRef) extends Actor with ActorLogging with Serializable
   def clusterPath = s"${cluster.selfAddress}${self.path.toStringWithoutAddress}"
 
   // PersistentActor
-  override def receive: Receive = initial
+  override def receive: Receive = active
 
   // actor should passivate after 20 min of no messages
   // https://doc.akka.io/docs/akka/2.5/java/cluster-sharding.html#passivation
   context.setReceiveTimeout(20 minutes)
 
-  def bootstrap(uid: UUID) = {
-    log.info(s"UserActor(${uid}) bootstrap")
-    for {
-      _ <- Future.successful(Unit)  // TODO: restore the state of the world since last ...
-    } yield {
-      // TODO: set the state...
-      userId = uid
-      context.become(active)
-      queue.dequeueAll(_ => true).foreach(self ! _)
-      queue.clear()
-      Unit
-    }
-  }
-
-
-  def initial: Receive = {
-    case a @ UserActor.ShardMessage(uid, _) =>
-      log.info("UserActor GOT A MESSAGE ")
-      log.info(s"initial .. booting user: ${uid}")
-      queue.enqueue(a)    // queue up message for when we become active and can handle it...
-      context.become(gated)
-      bootstrap(uid).recover{
-        case t: Throwable =>
-          t.printStackTrace()
-          queue.clear()
-          context.become(initial)
-      }
-  }
-
-  def gated: Receive = {
-    case a:UserActor.ShardMessage =>
-      log.info(s"gated UserActor(${userId}) queueing message")
-      queue.enqueue(a)    // queue up message for when we become active and can handle it...
-    case a =>
-      log.warning(s"Unknown message type while actor gated ${a}") // ignore..
-  }
 
   def extractMessage(any: Any): Any = any match {
     case UserActor.ShardMessage(_, msg) => msg

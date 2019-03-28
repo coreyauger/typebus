@@ -40,6 +40,7 @@ const typeMap = {
         stores.traceStore.addTrace(trace)  
     },
     "io.surfkit.typebus.event.package.ExceptionTrace" : (socketEvent: SocketEvent) =>{        
+        console.warn("Service Exception")
         const data = Serializers.exceptionTraceType.fromBuffer( Buffer.from(socketEvent.payload) )
         console.log("data", data)
         const trace = data as ExceptionTrace

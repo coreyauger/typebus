@@ -168,7 +168,7 @@ class TriggerEventDialog extends React.Component<Props & WithStyles<typeof style
             onChange={this.handleTabChange}
             indicatorColor="primary"
             textColor="primary"
-            fullWidth
+            variant="fullWidth"
           >
             <Tab label="json event" />
             <Tab label="avro schema" />            

@@ -113,4 +113,14 @@ export const SerializerMappings = {
     "io.surfkit.typebus.event.package.OutEventTrace": Serializers.outEventTraceType,
     "io.surfkit.typebus.event.package.ExceptionTrace": Serializers.exceptionTraceType,
     "io.surfkit.typebus.event.package.ServiceException": Serializers.serviceExceptionType,    
+
+    "io.surfkit.typebus.event.Hb": Serializers.hbType,
+    "io.surfkit.typebus.event.PublishedEvent": Serializers.publishedEventType,
+    "io.surfkit.typebus.event.SocketEvent": Serializers.socketEventType,
+    "io.surfkit.typebus.event.GetServiceDescriptor": Serializers.getServiceDescriptorType,
+    "io.surfkit.typebus.event.ServiceDescriptor": Serializers.serviceDescriptorType,
+    "io.surfkit.typebus.event.InEventTrace": Serializers.inEventTraceType,
+    "io.surfkit.typebus.event.OutEventTrace": Serializers.outEventTraceType,
+    "io.surfkit.typebus.event.ExceptionTrace": Serializers.exceptionTraceType,
+    "io.surfkit.typebus.event.ServiceException": Serializers.serviceExceptionType,
 }

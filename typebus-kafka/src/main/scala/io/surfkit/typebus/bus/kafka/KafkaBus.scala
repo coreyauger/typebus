@@ -122,7 +122,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
       system.log.debug("******** TypeBus: replyAndCommit")
       system.log.debug(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
       val retType = x._3.getClass.getCanonicalName
-      system.log.debug(s"replyAndCommit for type: ${retType}")
+      system.log.info(s"replyAndCommit for type: ${retType}")
       val eventId = UUID.randomUUID.toString
       if(x._3 != Unit) {
         implicit val timeout = Timeout(4 seconds)

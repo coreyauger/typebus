@@ -323,7 +323,19 @@ object Typebus extends ResourceDb{
         }
       }
     }
-    val rootNode = termTree(tpe).asInstanceOf[Node]
+    val rootNode = termTree(tpe) match{
+      case x: Node => x
+      case x: BiContainer => Node(
+          symbol = Typebus.Symbol.CaseClass,
+          `type` = "io.surfkit.TypeWrapper",
+          members = Map(
+            "wrap" -> Property(x, false)
+          ),
+          baseClasses = Seq.empty,
+          companion = None
+        )
+      case _ => c.abort(c.enclosingPosition, "Bad root type for typebus mapping")
+    }
     //println(s"rootNode: ${rootNode}")
 
     //println(s"members: ${tpe.members}")
@@ -397,9 +409,10 @@ object Typebus extends ResourceDb{
       val Wtpe = weakTypeOf[W]
       val Rtpe = weakTypeOf[R]
       val fqn = symbol.fullName
+      //println(s"\nzert: ${Wtpe}\nio.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)")
       val code =
         q"""
-            io.surfkit.typebus.module.Service.registerServiceType[${symbol}](new $Rtpe, $fqn)
+            io.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)
             new ByteStreamReaderWriter(new $Rtpe, new $Wtpe)
          """
       //println(showCode(code))

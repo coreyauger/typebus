@@ -16,12 +16,12 @@ trait Module {
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
   var listOfImplicitsReaders = Map.empty[EventType, ByteStreamReader[Any] ]
   var listOfImplicitsWriters = Map.empty[EventType, ByteStreamWriter[Any] ]
-  var listOfFunctions = List.empty[(EventType, EventType)]
+  var listOfFunctions = Map.empty[EventType, EventType]
 
   var listOfServicePartialsWithMeta = List.empty[PartialFunction[_, Future[TypeBus]]]
   var listOfServiceImplicitsReaders = Map.empty[EventType, ByteStreamReader[TypeBus] ]
   var listOfServiceImplicitsWriters = Map.empty[EventType, ByteStreamWriter[TypeBus] ]
-  var listOfServiceFunctions = List.empty[(EventType, EventType)]
+  var listOfServiceFunctions = Map.empty[EventType, EventType]
 
   var streamBuilderMap = Map.empty[EventType, StreamBuilder[_, _]]
 
@@ -37,7 +37,7 @@ trait Module {
   protected[this] def op2[T <: Any : ClassTag, U <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
-    listOfFunctions = (topic, returnType) :: listOfFunctions
+    listOfFunctions += (topic -> returnType)
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
     listOfImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[Any]])
@@ -56,7 +56,7 @@ trait Module {
     */
   protected[this] def op2Unit[T <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] ): StreamBuilder[T, Unit]  = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
-    listOfFunctions = (topic, EventType.parse("scala.Unit")) :: listOfFunctions
+    listOfFunctions += (topic -> EventType.parse("scala.Unit"))
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
     val sb = new StreamBuilder[T, Unit] {}
@@ -76,7 +76,7 @@ trait Module {
   protected[this] def op2Service[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
     val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
     val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
-    listOfServiceFunctions = (topic, returnType) :: listOfServiceFunctions
+    listOfServiceFunctions += (topic -> returnType)
     listOfServicePartialsWithMeta = p :: listOfServicePartialsWithMeta
     listOfServiceImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[TypeBus]])
     listOfServiceImplicitsWriters +=  (returnType -> writer.asInstanceOf[ByteStreamWriter[TypeBus]])

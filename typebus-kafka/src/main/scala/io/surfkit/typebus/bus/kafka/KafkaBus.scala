@@ -117,43 +117,57 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
   service.registerServiceStream(getServiceDescriptor _)
 
 
-  val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any), Future[Done]]{
-    def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = {
-      system.log.debug("******** TypeBus: replyAndCommit")
-      system.log.debug(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
-      val retType = x._3.getClass.getCanonicalName
-      system.log.info(s"replyAndCommit for type: ${retType}")
-      val eventId = UUID.randomUUID.toString
-      if(x._3 != Unit) {
-        implicit val timeout = Timeout(4 seconds)
+  val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any, EventType), Future[Done]]{
+    def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]], PublishedEvent, Any, EventType) ) = {
+      try {
+        system.log.debug("******** TypeBus: replyAndCommit")
+        system.log.debug(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
+        val inType = x._4
+        val retType =
+          if(service.listOfImplicitsWriters.contains( EventType.parse(x._3.getClass.getCanonicalName) ))  // if we can use the type lets do it
+            EventType.parse(x._3.getClass.getCanonicalName)
+          else  // otherwise we got type erasured.  These are types we can not deduce such as Either[A,B].  So we must rely on the function mapping that we stored.
+            service.listOfFunctions(inType)
 
-        val sb = service.streamBuilderMap(EventType.parse(retType))
-        val partitionKey = sb.partitionKey.flatMap(_ => sb.untyped(x._3) )   // FIXME: this untyped bit sux
-        val publishedEvent = PublishedEvent(
-          meta = x._2.meta.copy(
-            eventId = eventId,
-            eventType = EventType.parse(x._3.getClass.getCanonicalName),
-            responseTo = Some(x._2.meta.eventId),
-            key = partitionKey,
-            occurredAt = Instant.now()
-          ),
-          payload = service.listOfServiceImplicitsWriters.get(EventType.parse(retType)).map{ writer =>
-            writer.write(x._3.asInstanceOf[TypeBus])
-          }.getOrElse(service.listOfImplicitsWriters(EventType.parse(retType)).write(x._3))
-        )
-        // RPC clients publish to the "Serivice Name" subscription, where that service then can route message back to RPC client.
-        x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach{ rpc =>
-          publisher.publish( publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name), key = partitionKey )) )
+        system.log.info(s"replyAndCommit for type: ${retType}")
+        system.log.info(s"in  type: ${retType}")
+        val eventId = UUID.randomUUID.toString
+        if (x._3 != Unit) {
+          implicit val timeout = Timeout(4 seconds)
+          val sb = service.streamBuilderMap(retType)
+          val partitionKey = sb.partitionKey.flatMap(_ => sb.untyped(x._3)) // FIXME: this untyped bit sux
+          val publishedEvent = PublishedEvent(
+            meta = x._2.meta.copy(
+              eventId = eventId,
+              eventType = EventType.parse(x._3.getClass.getCanonicalName),
+              responseTo = Some(x._2.meta.eventId),
+              key = partitionKey,
+              occurredAt = Instant.now()
+            ),
+            payload = service.listOfServiceImplicitsWriters.get(retType).map { writer =>
+              writer.write(x._3.asInstanceOf[TypeBus])
+            }.getOrElse(service.listOfImplicitsWriters(retType).write(x._3))
+          )
+          // RPC clients publish to the "Serivice Name" subscription, where that service then can route message back to RPC client.
+          x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach { rpc =>
+            publisher.publish(publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name), key = partitionKey)))
+          }
+          publisher.publish(publishedEvent)
         }
-        publisher.publish(publishedEvent)
+        system.log.debug(s"typebus kafka commit offset for event: ${retType} with eventId: ${}")
+        x._1.committableOffset.commitScaladsl()
+      }catch{
+        case t: Throwable =>
+          t.printStackTrace()
+          publisher.produceErrorReport(t, x._2.meta, s"Error trying to produce result for to event: ${x._2.meta.eventType}\n${t.getMessage}")
+          Future.successful(Done)
+
       }
-      system.log.debug(s"typebus kafka commit offset for event: ${retType} with eventId: ${}")
-      x._1.committableOffset.commitScaladsl()
     }
-    def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any) ) = true
+    def isDefinedAt(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any, EventType) ) = true
   }
 
-  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))).mkString("\n")}")
+  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList)).mkString("\n")}")
 
   val bufferSize = 16 // TODO: make this configurable
   val parrallelism = 4 // TODO: make config
@@ -170,14 +184,14 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
       .mapAsyncUnordered(parrallelism) { case (msg, publish) =>
         try {
           publisher.traceEvent(InEventTrace(service.serviceIdentifier, publish), publish.meta)
-          consume(publish).map(x => (msg, publish, x))
-            .recover{ case t: Throwable => (msg, publish, Recoverable(t)) }
-        }catch{ case t:Throwable => Future.successful(msg, publish, Recoverable(t)) }
+          consume(publish).map(x => (msg, publish, x, publish.meta.eventType))
+            .recover{ case t: Throwable => (msg, publish, Recoverable(t), publish.meta.eventType) }
+        }catch{ case t:Throwable => Future.successful(msg, publish, Recoverable(t), publish.meta.eventType) }
       }.statefulMapConcat( () => {
         val retryState = scala.collection.mutable.HashMap.empty[String, (Int, RetryPolicy)]
         elm => {
           elm match {
-            case (msg, publish, Recoverable(t)) =>
+            case (msg, publish, Recoverable(t), et) =>
               publisher.produceErrorReport(t, publish.meta, s"Error consuming event: ${publish.meta.eventType}\n${t.getMessage}")
               val (attempt, retryPolicy): (Int,RetryPolicy) = retryState.get(publish.meta.eventId).getOrElse {
                 val p = service.streamBuilderMap(publish.meta.eventType).retry.map { policy =>
@@ -204,7 +218,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
                   }
                   Nil
               }
-            case (_, publish, _) =>
+            case (_, publish, _, _) =>
               retryState -= publish.meta.eventId
               elm :: Nil
           }
@@ -213,8 +227,8 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
       .mapAsyncUnordered(parrallelism)(replyAndCommit)
       .runWith(Sink.ignore)
 
-  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn)) :_*)
-  startConsumerGraph(backChannelSettings, service.listOfServiceFunctions.map(_._1.fqn): _*)
+  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList) :_*)
+  startConsumerGraph(backChannelSettings, service.listOfServiceFunctions.keys.map(_.fqn).toList: _*)
 
   publisher.publish(serviceDescription)
 }

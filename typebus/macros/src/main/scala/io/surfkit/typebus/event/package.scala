@@ -50,6 +50,7 @@ package object event {
     def parse(et: String): EventType =
       if( et.startsWith("api.") ) EventType(et.replaceFirst("api.", ""))
       else EventType(et)
+    def unit = EventType.parse("scala.Unit")
   }
 
   /***

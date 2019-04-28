@@ -123,16 +123,20 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
         system.log.debug("******** TypeBus: replyAndCommit")
         system.log.debug(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
         val inType = x._4
+        system.log.info(s"ret type.getClass.getCanonicalName: ${x._3.getClass.getCanonicalName}")
+        val et = EventType.parse(x._3.getClass.getCanonicalName)
         val retType =
-          if(service.listOfImplicitsWriters.contains( EventType.parse(x._3.getClass.getCanonicalName) ))  // if we can use the type lets do it
-            EventType.parse(x._3.getClass.getCanonicalName)
+          if(service.listOfImplicitsWriters.contains( et ))  // if we can use the type lets do it
+            et
+          else if(service.listOfServiceImplicitsWriters.contains(et)) // check service types
+            et
           else  // otherwise we got type erasured.  These are types we can not deduce such as Either[A,B].  So we must rely on the function mapping that we stored.
-            service.listOfFunctions(inType)
+            service.listOfFunctions.get(inType).getOrElse(EventType.unit)
 
         system.log.info(s"replyAndCommit for type: ${retType}")
         system.log.info(s"in  type: ${retType}")
         val eventId = UUID.randomUUID.toString
-        if (x._3 != Unit) {
+        if (retType != EventType.unit) {
           implicit val timeout = Timeout(4 seconds)
           val sb = service.streamBuilderMap(retType)
           val partitionKey = sb.partitionKey.flatMap(_ => sb.untyped(x._3)) // FIXME: this untyped bit sux

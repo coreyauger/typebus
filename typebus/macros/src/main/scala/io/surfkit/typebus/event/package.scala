@@ -47,9 +47,10 @@ package object event {
 
   case class EventType(fqn: String) extends DtoType
   object EventType{
-    def parse(et: String): EventType =
-      if( et.startsWith("api.") ) EventType(et.replaceFirst("api.", ""))
+    def parse(et: String): EventType = {
+      if (et.startsWith("api.")) EventType(et.replaceFirst("api.", ""))
       else EventType(et)
+    }
     def unit = EventType.parse("scala.Unit")
   }
 

@@ -18,9 +18,8 @@ object Service{
   val registry = scala.collection.mutable.HashMap.empty[ EventType, String]
 
   def registerServiceType[T : ClassTag](serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
-
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
-    println(s"\n\nruntimeClass: ${runtimeClass}")
+    println(s"\nruntimeClass: ${runtimeClass}")
     // CA - pretty cheesy data store.
     registry += EventType.parse(fqn) -> serviceType.schema
   }
@@ -30,6 +29,7 @@ object Service{
   * The main type for defining your service.
   */
 abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publisher) extends Module with AvroByteStreams {
+  import scala.reflect.runtime.universe._
 
   val upTime = Instant.now()
 
@@ -42,7 +42,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerStream[T <: Any : ClassTag, U <: Any : ClassTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
+  def registerStream[T <: Any : ClassTag : TypeTag, U <: Any : ClassTag : TypeTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
     op2(funToPF2(f))
 
   /***
@@ -52,7 +52,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  def registerStream[T <: Any : ClassTag](f:  (T, EventMeta) => Future[Unit]) (implicit reader: ByteStreamReader[T]): StreamBuilder[T, Unit] =
+  def registerStream[T <: Any : ClassTag: TypeTag](f:  (T, EventMeta) => Future[Unit]) (implicit reader: ByteStreamReader[T]): StreamBuilder[T, Unit] =
     op2Unit(funToPF2Unit(f))
 
   /***
@@ -64,7 +64,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  def registerServiceStream[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
+  def registerServiceStream[T <: TypeBus : ClassTag : TypeTag, U <: TypeBus : ClassTag : TypeTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
     op2Service(funToPF2(f))
 
 

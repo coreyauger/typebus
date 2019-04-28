@@ -132,7 +132,6 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
             et
           else  // otherwise we got type erasured.  These are types we can not deduce such as Either[A,B].  So we must rely on the function mapping that we stored.
             service.listOfFunctions.get(inType).getOrElse(EventType.unit)
-
         system.log.info(s"replyAndCommit for type: ${retType}")
         system.log.info(s"in  type: ${retType}")
         val eventId = UUID.randomUUID.toString
@@ -143,7 +142,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
           val publishedEvent = PublishedEvent(
             meta = x._2.meta.copy(
               eventId = eventId,
-              eventType = EventType.parse(x._3.getClass.getCanonicalName),
+              eventType = retType,
               responseTo = Some(x._2.meta.eventId),
               key = partitionKey,
               occurredAt = Instant.now()

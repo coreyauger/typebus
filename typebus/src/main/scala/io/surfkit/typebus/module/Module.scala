@@ -11,6 +11,7 @@ import scala.reflect.ClassTag
   * Module is the base of ALL typebus service.
   */
 trait Module {
+  import scala.reflect.runtime.universe._
 
   var listOfPartialsWithMeta = List.empty[PartialFunction[_, Future[Any]]]
   var listOfPartialsWithMetaUnit = List.empty[PartialFunction[_, Future[Unit]]]
@@ -25,6 +26,20 @@ trait Module {
 
   var streamBuilderMap = Map.empty[EventType, StreamBuilder[_, _]]
 
+  def paramInfo[T: TypeTag]: List[String] = {
+      val targs = typeOf[T] match { case TypeRef(_, _, args) => args }
+      targs.map(_.typeSymbol.fullName)
+   }
+
+  def fullQualifiedEventType[T : ClassTag : TypeTag]: EventType = {
+    val inTypeParams =  paramInfo[T]
+    val itp = inTypeParams match{
+      case Nil => ""
+      case xs => xs.mkString("[",",","]")
+    }
+    EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName + itp)
+  }
+
   /***
     * op2 - internal method to register a partial function that also receives EventMeta
     * @param p - the partial function to register.
@@ -34,9 +49,9 @@ trait Module {
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  protected[this] def op2[T <: Any : ClassTag, U <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
-    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
-    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
+  protected[this] def op2[T <: Any : ClassTag : TypeTag, U <: Any : ClassTag : TypeTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
+    val topic = fullQualifiedEventType[T]
+    val returnType = fullQualifiedEventType[U]  // will construct a type and include type params
     listOfFunctions += (topic -> returnType)
     listOfPartialsWithMeta = p :: listOfPartialsWithMeta
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
@@ -54,8 +69,8 @@ trait Module {
     * @tparam T - The IN service request type
     * @return - Unit
     */
-  protected[this] def op2Unit[T <: Any : ClassTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] ): StreamBuilder[T, Unit]  = {
-    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
+  protected[this] def op2Unit[T <: Any : ClassTag : TypeTag](p: PartialFunction[(T, EventMeta), Future[Unit] ])(implicit reader: ByteStreamReader[T] ): StreamBuilder[T, Unit]  = {
+    val topic = fullQualifiedEventType[T]
     listOfFunctions += (topic -> EventType.parse("scala.Unit"))
     listOfPartialsWithMetaUnit = p :: listOfPartialsWithMetaUnit
     listOfImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[Any]])
@@ -73,9 +88,9 @@ trait Module {
     * @tparam U - The OUT service request type
     * @return - Unit
     */
-  protected[this] def op2Service[T <: TypeBus : ClassTag, U <: TypeBus : ClassTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
-    val topic = EventType.parse(scala.reflect.classTag[T].runtimeClass.getCanonicalName)
-    val returnType = EventType.parse(scala.reflect.classTag[U].runtimeClass.getCanonicalName)
+  protected[this] def op2Service[T <: TypeBus : ClassTag : TypeTag, U <: TypeBus : ClassTag: TypeTag](p: PartialFunction[(T, EventMeta), Future[U]])(implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U] ): StreamBuilder[T, U] = {
+    val topic = fullQualifiedEventType[T]
+    val returnType = fullQualifiedEventType[U]  // will construct a type and include type params
     listOfServiceFunctions += (topic -> returnType)
     listOfServicePartialsWithMeta = p :: listOfServicePartialsWithMeta
     listOfServiceImplicitsReaders +=  (topic -> reader.asInstanceOf[ByteStreamReader[TypeBus]])

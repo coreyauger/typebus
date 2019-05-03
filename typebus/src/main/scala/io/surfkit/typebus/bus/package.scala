@@ -95,8 +95,19 @@ package object bus {
       t.printStackTrace(new PrintWriter(sw))
       val ex = ServiceException(
         message = msg,
+        throwableType = t.getClass.getCanonicalName,
         stackTrace = sw.toString.split("\n").toSeq
       )
+      // Close any Rpc Client Futures.. (they return Either[ServiceException, U])
+      // RPC clients publish to the "Serivice Name" subscription, where that service then can route message back to RPC client.
+      meta.directReply.filterNot(_.service.name == serviceIdentifier.name).foreach { rpc =>
+        publish(
+          PublishedEvent(
+            meta = meta.copy(eventType = EventType.parse(rpc.service.name)),
+            payload = ServiceExceptionWriter.write(ex)
+          )
+        )
+      }
       traceEvent(
         ExceptionTrace(serviceIdentifier, PublishedEvent(
           meta = EventMeta(

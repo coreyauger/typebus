@@ -151,7 +151,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
               writer.write(x._3.asInstanceOf[TypeBus])
             }.getOrElse(service.listOfImplicitsWriters(retType).write(x._3))
           )
-          // RPC clients publish to the "Serivice Name" subscription, where that service then can route message back to RPC client.
+          // RPC clients publish to the "Service Name" subscription, where that service then can route message back to RPC client.
           x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach { rpc =>
             publisher.publish(publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name), key = partitionKey)))
           }
@@ -161,6 +161,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
         x._1.committableOffset.commitScaladsl()
       }catch{
         case t: Throwable =>
+          // TODO: we want to convert this to an User Error type
           t.printStackTrace()
           publisher.produceErrorReport(t, x._2.meta, s"Error trying to produce result for to event: ${x._2.meta.eventType}\n${t.getMessage}")
           Future.successful(Done)

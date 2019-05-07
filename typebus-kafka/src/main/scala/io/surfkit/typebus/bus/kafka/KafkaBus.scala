@@ -101,6 +101,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
   val backChannelSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
     .withProperties(kafkaConfig.kafkaConfigMap)
+    .withGroupId(UUID.randomUUID().toString)  // TODO: appears we need a groupId.. not sure if this is the right way to make it unique
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
 
@@ -151,7 +152,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
               writer.write(x._3.asInstanceOf[TypeBus])
             }.getOrElse(service.listOfImplicitsWriters(retType).write(x._3))
           )
-          // RPC clients publish to the "Serivice Name" subscription, where that service then can route message back to RPC client.
+          // RPC clients publish to the "Service Name" subscription, where that service then can route message back to RPC client.
           x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach { rpc =>
             publisher.publish(publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name), key = partitionKey)))
           }
@@ -230,7 +231,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
       .mapAsyncUnordered(parrallelism)(replyAndCommit)
       .runWith(Sink.ignore)
 
-  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList) :_*)
+  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.keys.map(_.fqn).toList ) :_*)
   startConsumerGraph(backChannelSettings, service.listOfServiceFunctions.keys.map(_.fqn).toList: _*)
 
   publisher.publish(serviceDescription)

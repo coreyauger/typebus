@@ -29,7 +29,7 @@ class Client(serviceIdentifier: ServiceIdentifier, publisher: Publisher, system:
     * @tparam U - The OUT type in the service called. Wrapped as Future[U]
     * @return - The Future[U] return from the service call.
     */
-  def wire[T : ClassTag, U : ClassTag](x: T, eventMeta: Option[EventMeta] = None)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[U]= {
+  def wire[T : ClassTag, U : ClassTag](x: T, eventMeta: Option[EventMeta] = None)(implicit timeout:Timeout = Timeout(4 seconds), w:ByteStreamWriter[T], r: ByteStreamReader[U]) :Future[Either[ServiceException,U]]= {
     val tType = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     val uType = scala.reflect.classTag[U].runtimeClass.getCanonicalName
     val gather = system.actorOf(Props(new GatherActor[T, U](serviceIdentifier, publisher, timeout, w, r)))
@@ -42,7 +42,10 @@ class Client(serviceIdentifier: ServiceIdentifier, publisher: Publisher, system:
         correlationId = None
       )
     }
-    (gather ? GatherActor.Request(x)).map(_.asInstanceOf[U]).recoverWith{
+    (gather ? GatherActor.Request(x)).map{
+      case x: U => Right(x.asInstanceOf[U])
+      case y: ServiceException => Left(y)
+    }.recoverWith{
       case t: Throwable =>
         publisher.produceErrorReport(t, meta, s"FAILED RPC call ${tType} => Future[${uType}] failed with exception '${t.getMessage}'")(system)
         Future.failed(t)

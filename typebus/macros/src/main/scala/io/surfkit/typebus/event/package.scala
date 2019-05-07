@@ -18,6 +18,7 @@ package object event {
   }
   case class ServiceException(
                message: String,
+               throwableType: String,
                stackTrace: Seq[String],
                extra: Map[String, String] = Map.empty
   ) extends TypeBus

@@ -94,11 +94,11 @@ class TypebusTestConsumer(sercieApi: Service, publisher: Publisher, system: Acto
   service.registerServiceStream(getServiceDescriptor _)
 
 
+  system.log.info(s"\n\nTYPEBUS KAFKA STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList)).mkString("\n")}")
 
-  system.log.info(s"\n\nTYPEBUS TEST STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))).mkString("\n")}")
 
   system.actorOf(Props(new Actor {
-    (service.serviceIdentifier.name :: (service.listOfFunctions.map(_._1.fqn) ::: service.listOfServiceFunctions.map(_._1.fqn))).map { topic =>
+    (service.serviceIdentifier.name :: (service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList)).map { topic =>
       log.info(s"typebus akka bus subscribe to: ${topic}")
       mediator ! Subscribe(topic, Some(service.serviceIdentifier.name), context.self)
     }

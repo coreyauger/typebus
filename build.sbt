@@ -20,8 +20,6 @@ val `typebus-kafka` = ProjectRef(file("typebus-kafka"), "typebus-kafka")
 
 val `typebus-testkit` = ProjectRef(file("typebus-testkit"), "typebus-testkit")
 
-//val `typebus-squbs` = ProjectRef(file("typebus-squbs"), "typebus-squbs")
-
 val `telemetry` = ProjectRef(file("telemetry/server"), "telemetry")
 
 fork in ThisBuild := true

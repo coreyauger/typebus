@@ -94,7 +94,7 @@ package object bus {
       val sw = new StringWriter
       t.printStackTrace(new PrintWriter(sw))
       val ex = ServiceException(
-        message = msg,
+        message = msg + s"\n${t.getMessage}",
         throwableType = t.getClass.getCanonicalName,
         stackTrace = sw.toString.split("\n").toSeq
       )

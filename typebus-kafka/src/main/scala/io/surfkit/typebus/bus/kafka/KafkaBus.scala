@@ -101,6 +101,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
   val backChannelSettings = ConsumerSettings(system, new ByteArrayDeserializer, new ByteArrayDeserializer)
     .withProperties(kafkaConfig.kafkaConfigMap)
+    .withGroupId(UUID.randomUUID().toString)  // TODO: appears we need a groupId.. not sure if this is the right way to make it unique
     .withProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest")
 
 
@@ -161,7 +162,6 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
         x._1.committableOffset.commitScaladsl()
       }catch{
         case t: Throwable =>
-          // TODO: we want to convert this to an User Error type
           t.printStackTrace()
           publisher.produceErrorReport(t, x._2.meta, s"Error trying to produce result for to event: ${x._2.meta.eventType}\n${t.getMessage}")
           Future.successful(Done)
@@ -231,7 +231,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
       .mapAsyncUnordered(parrallelism)(replyAndCommit)
       .runWith(Sink.ignore)
 
-  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList) :_*)
+  startConsumerGraph(consumerSettings, (service.serviceIdentifier.name :: service.listOfFunctions.keys.map(_.fqn).toList ) :_*)
   startConsumerGraph(backChannelSettings, service.listOfServiceFunctions.keys.map(_.fqn).toList: _*)
 
   publisher.publish(serviceDescription)

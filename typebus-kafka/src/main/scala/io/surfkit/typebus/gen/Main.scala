@@ -13,7 +13,7 @@ import scala.concurrent.duration._
   */
 object Main extends App {
 
-  implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+  implicit val system = ActorSystem("codegen")
   lazy val serviceIdentity = ServiceIdentifier("gen-code-service")
 
   // only want to activate and join cluster in certain cases
@@ -23,6 +23,7 @@ object Main extends App {
     import system.dispatcher
 
     //registerStream(genScalaServiceDescription("Kafka", List("src", "main", "scala")) _)
+    /*
     val getServiceDescriptor = GetServiceDescriptor(args.last)
 
     system.log.info(s"publish getServiceDescriptor: ${getServiceDescriptor} in 5 seconds")
@@ -30,22 +31,23 @@ object Main extends App {
       system.log.info(s"publish ....")
       producer.publish(getServiceDescriptor)
     }
-
+    */
   }
   lazy val consumer = new TypebusKafkaConsumer(service, producer, system)
 
   println("\n\n***********\n\n")
-  TypebusApplication
+
+  /*TypebusApplication
   (
     system,
     serviceIdentity,
     producer,
     service,
     consumer
-  )
+  )*/
 
 
-  CommandParser.runCli("Kafka")
+  CommandParser.runCli
 
   Thread.currentThread().join()
 }

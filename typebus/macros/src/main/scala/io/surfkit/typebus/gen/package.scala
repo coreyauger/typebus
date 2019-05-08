@@ -77,7 +77,7 @@ package object gen {
       * @param generator - ServiceGenerator definition
       * @return - List of tuple containing (package name, source code).
       */
-    def writeService(busType: String, generator: ServiceGenerator): List[(String, String)] = {
+    def writeService(generator: ServiceGenerator): List[(String, String)] = {
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
       val fqlToCaseClass = generator.classes.map(x => x.fqn -> x).toMap
       generator.classes.groupBy(_.packageName).map{
@@ -89,8 +89,9 @@ package object gen {
           sb.append("import scala.concurrent.Future\n")
           sb.append("import io.surfkit.typebus._\n")
           sb.append("import io.surfkit.typebus.event.EventMeta\n")
+          sb.append("import io.surfkit.typebus.bus.Publisher\n")
           sb.append("import io.surfkit.typebus.client._\n")
-          sb.append("import io.surfkit.typebus.event.ServiceIdentifier\n\n")
+          sb.append("import io.surfkit.typebus.event.{ServiceIdentifier, ServiceException}\n\n")
           sb.append(s"package object ${packageName.split('.').last}{\n\n")
           sb.append( classes.map(x => x.classRep).mkString("\n") )
           sb.append(s"\n\n   object Implicits extends AvroByteStreams{\n")
@@ -105,7 +106,7 @@ package object gen {
           sb.append("\n\n   /** Generated Actor Client */\n")
           // FIXME: we dont' know the service name when generating from the cli
           //sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
-          sb.append(s"   class Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
+          sb.append(s"   class Client(serviceIdentifier: ServiceIdentifier, publisher: Publisher)(implicit system: ActorSystem) extends Client(serviceIdentifier, publisher, system){\n")
           sb.append( "      import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")
@@ -121,7 +122,7 @@ package object gen {
             }
             val inType = fqlToCaseClass(method.in)
             val outType = fqlToCaseClass(method.out)
-            s"      def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}, eventMeta: Option[EventMeta] = None): Future[${outType.simpleName}] = wire[${inType.simpleName}, ${outType.simpleName}](x, eventMeta)"
+            s"      def ${inType.simpleName.take(1).toLowerCase}${inType.simpleName.drop(1)}(x: ${inType.simpleName}, eventMeta: Option[EventMeta] = None): Future[Either[ServiceException,${outType.simpleName}]] = wire[${inType.simpleName}, ${outType.simpleName}](x, eventMeta)"
           }.mkString("\n") )
           sb.append(s"\n   }")
 
@@ -134,9 +135,9 @@ package object gen {
       * writeCodeToFiles - writes the source code to the project directory to be compiled
       * @param generator - ServiceGenerator definition
       */
-    def writeCodeToFiles(busType: String, generator: ServiceGenerator, basePath: List[String] = List("src", "main", "scala")) = {
+    def writeCodeToFiles(generator: ServiceGenerator, basePath: List[String] = List("src", "main", "scala")) = {
       try {
-        writeService(busType, generator).foreach {
+        writeService(generator).foreach {
           case (packageName, sourceCode) =>
             val path = (basePath ::: packageName.split('.').toList).toArray
             val modelPath = Paths.get(path.mkString("/"))

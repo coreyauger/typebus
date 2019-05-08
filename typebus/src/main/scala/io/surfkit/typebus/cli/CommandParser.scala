@@ -72,7 +72,7 @@ object CommandParser {
     parser.parse(args, CmdConfig())
 
 
-  def runCli(busType: String = "Kafka") = {
+  def runCli = {
 
     val config = ConfigFactory.load()
 
@@ -94,7 +94,7 @@ object CommandParser {
             println("push code gen...")
             val generated = gen.selfCodeGen
             genCmd.out.foreach { outFile =>
-              gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, outFile.getAbsolutePath.split('/').toList )
+              gen.ScalaCodeWriter.writeCodeToFiles(generated, outFile.getAbsolutePath.split('/').toList )
             }
             val pushPaths = Try(config.getStringList("bus.code-gen.push").toList).toOption.getOrElse(List.empty[String])
             val projectDir = new java.io.File(".").toPath
@@ -103,14 +103,14 @@ object CommandParser {
               val scalaSrcPath = projectDir.resolve(part + "/src/main/scala")
               if(Files.isDirectory(scalaSrcPath)){
                 println(s"pushing code to: ${scalaSrcPath}")
-                gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, scalaSrcPath.toAbsolutePath.toString.split('/').toList )
+                gen.ScalaCodeWriter.writeCodeToFiles(generated, scalaSrcPath.toAbsolutePath.toString.split('/').toList )
               }
             }
           }else if(!genCmd.target.isEmpty){
             val target = genCmd.target.get
             val generated = gen.codeGen(target.toPath)
             genCmd.out.foreach { outFile =>
-              gen.ScalaCodeWriter.writeCodeToFiles(busType, generated, outFile.getAbsolutePath.split('/').toList )
+              gen.ScalaCodeWriter.writeCodeToFiles(generated, outFile.getAbsolutePath.split('/').toList )
             }
           }
 

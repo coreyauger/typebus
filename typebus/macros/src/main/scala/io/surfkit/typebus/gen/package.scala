@@ -106,7 +106,7 @@ package object gen {
           sb.append("\n\n   /** Generated Actor Client */\n")
           // FIXME: we dont' know the service name when generating from the cli
           //sb.append(s"   class ${serviceToClassName(generator.serviceName)}Client(serviceIdentifier: ServiceIdentifier)(implicit system: ActorSystem) extends ${busType}Client(serviceIdentifier){\n")
-          sb.append(s"   class Client(serviceIdentifier: ServiceIdentifier, publisher: Publisher)(implicit system: ActorSystem) extends Client(serviceIdentifier, publisher, system){\n")
+          sb.append(s"   class RpcClient(serviceIdentifier: ServiceIdentifier, publisher: Publisher)(implicit system: ActorSystem) extends Client(serviceIdentifier, publisher, system){\n")
           sb.append( "      import Implicits._\n")
           val methodsInThisPackage = classes.flatMap(x => methodMap.get(x.fqn).map{ y => ServiceMethodGenerator(x.fqn, y) } )
           //println(s"MAP: \n\n\n${fqlToCaseClass}\n\n")

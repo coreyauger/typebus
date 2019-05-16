@@ -37,7 +37,6 @@ class Client(serviceIdentifier: ServiceIdentifier, publisher: Publisher, system:
       EventMeta(
         eventId = UUID.randomUUID().toString,
         eventType = EventType.parse(x.getClass.getCanonicalName),
-        source = "",
         directReply = None,
         correlationId = None
       )

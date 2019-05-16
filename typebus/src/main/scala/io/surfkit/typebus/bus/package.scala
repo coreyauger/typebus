@@ -54,7 +54,6 @@ package object bus {
         meta = EventMeta(
           eventId = UUID.randomUUID().toString,
           eventType = EventType.parse(obj.getClass.getCanonicalName),
-          source = "",
           correlationId = Some(UUID.randomUUID().toString),
         ),
         payload = writer.write(obj)
@@ -112,7 +111,6 @@ package object bus {
         ExceptionTrace(serviceIdentifier, PublishedEvent(
           meta = EventMeta(
             eventId = UUID.randomUUID().toString,
-            source = "",
             eventType = EventType.parse(ex.getClass.getCanonicalName),
             correlationId = None,
             trace = true

@@ -113,7 +113,6 @@ package object event {
     * EventMeta - details and routing information for an Event
     * @param eventId - unique UUID of an event
     * @param eventType - the FQN of the event type
-    * @param source - address of actor emitting the event
     * @param correlationId - id to correlate events
     * @param directReply - used by RPC actor and generated clients
     * @param key - the key to use for kafka partition
@@ -123,7 +122,6 @@ package object event {
     */
   case class EventMeta(eventId: String,
                        eventType: EventType,
-                       source: String,
                        correlationId: Option[String],
                        trace: Boolean = false,
                        directReply: Option[RpcClient] = None,

@@ -51,9 +51,19 @@ class TypebusKafkaProducer(serviceId: ServiceIdentifier, system: ActorSystem, ka
 
   def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
+      // If an RPC call was made and this is not the service that called it.. we want to respond via the service channel.  This is why we do the compare to get the topic service name .. or simply use the fqn
+      def handleRpcCallback = event.meta.directReply.map(_.service.name).filter(_ != serviceId.name)
       event.meta.key match{
-        case Some(partitionKey) => producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, partitionKey.map(_.toByte).toArray, publishedEventWriter.write(event)))
-        case _ => producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, publishedEventWriter.write(event)))
+        case Some(partitionKey) =>
+          producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, partitionKey.map(_.toByte).toArray, publishedEventWriter.write(event)))
+          handleRpcCallback.foreach{ serviceName =>
+            producer.send(new ProducerRecord[Array[Byte], Array[Byte]](serviceName, partitionKey.map(_.toByte).toArray, publishedEventWriter.write(event)))
+          }
+        case _ =>
+          producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, publishedEventWriter.write(event)))
+          handleRpcCallback.foreach{ serviceName =>
+            producer.send(new ProducerRecord[Array[Byte], Array[Byte]](serviceName, publishedEventWriter.write(event)))
+          }
       }
       traceEvent(OutEventTrace(serviceIdentifier, event), event.meta)
     }catch{
@@ -152,10 +162,6 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
               writer.write(x._3.asInstanceOf[TypeBus])
             }.getOrElse(service.listOfImplicitsWriters(retType).write(x._3))
           )
-          // RPC clients publish to the "Service Name" subscription, where that service then can route message back to RPC client.
-          x._2.meta.directReply.filterNot(_.service.name == service.serviceIdentifier.name).foreach { rpc =>
-            publisher.publish(publishedEvent.copy(meta = publishedEvent.meta.copy(eventType = EventType.parse(rpc.service.name), key = partitionKey)))
-          }
           publisher.publish(publishedEvent)
         }
         system.log.debug(s"typebus kafka commit offset for event: ${retType} with eventId: ${}")

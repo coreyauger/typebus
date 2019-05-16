@@ -57,7 +57,6 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
       val meta =  EventMeta(
         eventId = UUID.randomUUID().toString,
         eventType = EventType.parse(msg.data.getClass.getCanonicalName),
-        source = clusterPath,
         directReply = Some(RpcClient(clusterPath, serviceIdentifier)),
         correlationId = Some(correlationId)
       )

@@ -12,6 +12,7 @@ import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
 import io.surfkit.typebus.event._
 
 import scala.reflect.ClassTag
+import scala.util.Try
 
 object GatherActor{
   //def props[T, U](producer: Publisher[T], timeout: Timeout, writer: ByteStreamWriter[T], reader: ByteStreamReader[U]): Props = Props(classOf[GatherActor[T, U]], producer, timeout, writer)
@@ -78,19 +79,22 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
     case x:PublishedEvent =>
       log.debug(s"GatherActor posting a reply.... ${x.payload.getClass.getSimpleName}")
       try{
-        val responsePayload = reader.read(x.payload)
+        val responsePayload = Try(reader.read(x.payload)).toOption.getOrElse( ServiceExceptionReader.read(x.payload) )
         replyTo ! responsePayload
         producer.traceEvent(InEventTrace(producer.serviceIdentifier, x), x.meta)
       }catch{
         case t: Throwable =>
-          producer.produceErrorReport(t, x.meta)
+          t.printStackTrace()
+          val tType = scala.reflect.classTag[T].runtimeClass.getCanonicalName
+          log.error(s"Gather actor failed to reply for response: ${tType}", t)
+          replyTo ! producer.produceErrorReport(t, x.meta)
       }finally {
         cancel.cancel()
         context.stop(self)
       }
 
-    case _ =>
-      log.warning(s"GatherActor ${self.path.toStringWithoutAddress} ...WTF WTF WTF !!!!!!!!")
+    case x =>
+      log.warning(s"GatherActor got Wrong message type ${x.getClass.getSimpleName}")
       cancel.cancel()
       context.stop(self)
 

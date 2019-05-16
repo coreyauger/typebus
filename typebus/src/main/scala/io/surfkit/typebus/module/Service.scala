@@ -75,11 +75,17 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     */
   def handleRpcReply( x: PublishedEvent )(implicit system: ActorSystem): Future[Unit] = {
     import system.dispatcher
-    x.meta.directReply.filterNot(_.service.name == serviceIdentifier.name).map{rpc =>
+    system.log.info(s"handleRpcReply on service(${serviceIdentifier.name}) for type: ${x.meta.eventType}")
+    x.meta.directReply.filter(_.service.name == serviceIdentifier.name).map{rpc =>
+      system.log.info(s"handleRpcReply lookup actor: ${rpc.path}")
       system.actorSelection(rpc.path).resolveOne(4 seconds).map{
+        system.log.info(s"handleRpcReply found actor. replying with type: ${x.meta.eventType}")
         actor => actor ! x
       }
-    }.getOrElse(Future.successful( Unit ))
+    }.getOrElse{
+      system.log.error(s"FAILED to handleRpcReply for type: ${x.meta.eventType}")
+      Future.successful( Unit )
+    }
   }
 
   def makeServiceDescriptor = ServiceDescriptor(

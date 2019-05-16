@@ -120,6 +120,7 @@ package object bus {
           payload = ServiceExceptionWriter.write(ex)
         )), meta)
       system.log.error(msg,t)
+      ex
     }
   }
 
@@ -132,20 +133,22 @@ package object bus {
     //def startTypeBus(implicit system: ActorSystem): Unit
 
     def consume(publish: PublishedEvent)(implicit system: ActorSystem) = {
-      val reader = service.listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(service.listOfImplicitsReaders(publish.meta.eventType))
-      val payload = reader.read(publish.payload)
-      if(service.handleEventWithMetaUnit.isDefinedAt( (payload, publish.meta) ) )
-        service.handleEventWithMetaUnit( (payload, publish.meta) )
-      else if(service.handleEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-        service.handleEventWithMeta( (payload, publish.meta)  )
-      else if(service.handleServiceEventWithMeta.isDefinedAt( (payload, publish.meta) ) )
-        service.handleServiceEventWithMeta( (payload, publish.meta)  )
-      else if(publish.meta.directReply.map(_.service.name == service.serviceIdentifier.name).getOrElse[Boolean](false))
+      system.log.info(s"typebus - consume event: ${publish.meta.eventType}")
+      if(publish.meta.directReply.map(_.service.name == service.serviceIdentifier.name).getOrElse[Boolean](false))    // handel rpc first since we won't have a key in "listOfServiceImplicitsReaders"
         service.handleRpcReply(publish)
-      else
-        throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")
+      else {
+        val reader = service.listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(service.listOfImplicitsReaders(publish.meta.eventType))
+        val payload = reader.read(publish.payload)
+        if (service.handleEventWithMetaUnit.isDefinedAt((payload, publish.meta)))
+          service.handleEventWithMetaUnit((payload, publish.meta))
+        else if (service.handleEventWithMeta.isDefinedAt((payload, publish.meta)))
+          service.handleEventWithMeta((payload, publish.meta))
+        else if (service.handleServiceEventWithMeta.isDefinedAt((payload, publish.meta)))
+          service.handleServiceEventWithMeta((payload, publish.meta))
+        else
+          throw new RuntimeException(s"No method defined for typebue type: ${publish.meta.eventType}.  Something is very wrong !!")
+      }
     }
-
   }
 
 

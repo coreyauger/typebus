@@ -164,14 +164,14 @@ package object gen {
 
   val prefix = "api."
 
-  sealed trait Typed
-  case class Simple(name: String) extends Typed{
+  sealed trait Typed{ def pos: Int }
+  case class Simple(name: String, pos: Int) extends Typed{
     override def toString: String = name
   }
-  case class MonoTyped(container: String, `type`: String) extends Typed{
+  case class MonoTyped(container: String, `type`: String, pos: Int) extends Typed{
     override def toString: String = s"${container}[${`type`}]"
   }
-  case class BiTyped(container: String, left: String, right: String) extends Typed{
+  case class BiTyped(container: String, left: String, right: String, pos: Int) extends Typed{
     override def toString: String = s"${container}[${left},${right}]"
   }
 
@@ -181,10 +181,10 @@ package object gen {
     def shortName(name: String) = name.split('.').last
     def collapseNode(n: Node): List[CodeSrc] = {
       val (members: List[(String, (Typed, Option[String]))], nodes: Iterable[List[Node]]) = n.members.map{
-        case (name, Property(Leaf(t), d, dv)) => (shortName(name),(Simple(t), dv), List.empty[Node])
-        case (name, Property(n @ Node(_,t, _, _, _), d, dv)) => (shortName(name),(Simple(t), dv), List(n))
-        case (name, Property(MonoContainer(c, t), d, dv)) => (shortName(name),(MonoTyped(c, t.`type`), dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
-        case (name, Property(BiContainer(c, t1, t2), d, dv)) => (shortName(name), (BiTyped(c,t1.`type`,t2.`type`), dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
+        case (name, Property(Leaf(t), p, d, dv)) => (shortName(name),(Simple(t, p), dv), List.empty[Node])
+        case (name, Property(n @ Node(_,t, _, _, _), p, d, dv)) => (shortName(name),(Simple(t, p), dv), List(n))
+        case (name, Property(MonoContainer(c, t), p, d, dv)) => (shortName(name),(MonoTyped(c, t.`type`, p), dv), if(t.isInstanceOf[Node]) List(t.asInstanceOf[Node]) else List.empty[Node])
+        case (name, Property(BiContainer(c, t1, t2), p, d, dv)) => (shortName(name), (BiTyped(c,t1.`type`,t2.`type`, p), dv), List[Option[Node]]( if(t1.isInstanceOf[Node]) Some(t1.asInstanceOf[Node]) else None, if(t2.isInstanceOf[Node]) Some(t2.asInstanceOf[Node]) else None).flatten)
         case x => throw new RuntimeException(s"You have a Property that tyepbus does not know how to deal with.  This should not happen.  ${x}")
       }.map(x => (x._1 -> x._2, x._3) ).unzip
 
@@ -205,9 +205,9 @@ package object gen {
       if(fqnSet.contains(name))prefix + name
       else name
     def prefixTyped(typed: Typed) = typed match{
-      case Simple(name) => Simple(prefixName(name))
-      case MonoTyped(c, t) => MonoTyped(prefixName(c), prefixName(t))
-      case BiTyped(c, l, r) => BiTyped(prefixName(c), prefixName(l), prefixName(r))
+      case Simple(name, p) => Simple(prefixName(name), p)
+      case MonoTyped(c, t, p) => MonoTyped(prefixName(c), prefixName(t), p)
+      case BiTyped(c, l, r, p) => BiTyped(prefixName(c), prefixName(l), prefixName(r), p)
     }
     val prefixedCodes = codes.map{
       case (pack, codeSrc) => (prefix+pack, CodeSrc(
@@ -239,13 +239,13 @@ package object gen {
                 fqn = gen.Fqn(code.`type`),
                 packageName = pack,
                 simpleName = typeToken,
-                classRep =s"   final case class ${typeToken}(${code.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}"))
+                classRep =s"   final case class ${typeToken}(${code.members.toList.sortBy(_._2._1.pos).map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr}"))
             case Symbol.Trait =>
               Some(gen.GeneratedClass(
                 fqn = gen.Fqn(code.`type`),
                 packageName = pack,
                 simpleName = typeToken,
-                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.map(x => s"      def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
+                classRep =s"   sealed trait ${typeToken}${inheritenceStr}{\n${code.members.toList.sortBy(_._2._1.pos).map(x => s"      def ${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString("\n      ")}\n   }"))
             case Symbol.Companion =>    // Uhg.. this is pretty cheesy..
               val inner = grouped.get(s"${pack}.${typeToken}").getOrElse( List.empty[(String, CodeSrc)]).map{ yy =>
                 val y = yy._2
@@ -256,7 +256,7 @@ package object gen {
                 if(y.members.isEmpty)
                   s"      final case object ${tt}${inheritenceStr2}\n"
                 else
-                  s"      final case class ${tt}(${y.members.map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}"
+                  s"      final case class ${tt}(${y.members.toList.sortBy(_._2._1.pos).map(x => s"${x._1}: ${x._2._1}${x._2._2.map(y => s" = ${y}").getOrElse("")}").mkString(", ")})${inheritenceStr2}"
               }
               Some(gen.GeneratedClass(
                 fqn = gen.Fqn(code.`type`),

@@ -2,12 +2,16 @@ package io.surfkit.typebus
 
 import java.nio.file.{FileSystems, Files, Path, Paths}
 import java.io._
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Collectors
+
 import boopickle.Default._
+
 import scala.collection.mutable
 import scala.concurrent.Future
 import io.surfkit.typebus.event.EventMeta
 import com.typesafe.config.ConfigFactory
+
 import scala.collection.JavaConversions._
 import scala.util.Try
 
@@ -77,9 +81,10 @@ object Typebus extends ResourceDb{
   /***
     * This type represents the AST type for a case class property
     * @param term - The AST type for the propery
+    * @param pos - The position the term was found in
     * @param hasDefault - if there as a default value provided or not.
     */
-  case class Property(term: Term, hasDefault: Boolean, defaultValue: Option[String] = None)
+  case class Property(term: Term, pos: Int, hasDefault: Boolean, defaultValue: Option[String] = None)
 
   /***
     * Terminator Node that contains a Type
@@ -215,6 +220,7 @@ object Typebus extends ResourceDb{
 
     def termTree(t: c.universe.Type, exploreCompanion: Boolean = true): Term = {
       //println(s"t: ${t}")
+      var pos = new AtomicInteger(0)
       val symbol = t.typeSymbol ; //println(s"identify symbol: ${symbol}")
       if( supportedContainerTypes.map(_+"[").exists(t.toString.startsWith) ){
         t match{
@@ -261,7 +267,7 @@ object Typebus extends ResourceDb{
                 case x =>
                   //val dataType = x.info.toString  //println(s"dataType: ${dataType}")
                   //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
-                  (x.fullName -> Property(termTree(x.info, false), x.asTerm.isParamWithDefault) )
+                  (x.fullName -> Property(termTree(x.info, false), pos.getAndIncrement(), x.asTerm.isParamWithDefault) )
               }.toMap,
               baseClasses = Seq.empty[Term],
               companion = None
@@ -276,7 +282,7 @@ object Typebus extends ResourceDb{
             case x =>
               val dataType = x.info.toString  //println(s"dataType: ${dataType}")
               //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
-              (x.fullName -> Property(termTree(x.info, exploreCompanion), x.asTerm.isParamWithDefault) )
+              (x.fullName -> Property(termTree(x.info, exploreCompanion), pos.getAndIncrement(), x.asTerm.isParamWithDefault) )
           }.toMap,
           baseClasses = baseClasses,
           companion = comp
@@ -315,7 +321,7 @@ object Typebus extends ResourceDb{
                 }else None
                 //println(s"defaultValueOpt: ${defaultValueOpt}")
                 //println(s"${x} hasDefault: ${x.asTerm.isParamWithDefault} info: ${x.info}")
-                (x.fullName -> Property(termTree(x.info, exploreCompanion), x.asTerm.isParamWithDefault, defaultValueOpt))
+                (x.fullName -> Property(termTree(x.info, exploreCompanion), pos.getAndIncrement(), x.asTerm.isParamWithDefault, defaultValueOpt))
             }.toMap,
             baseClasses = t.baseClasses.map(x => t.baseType(x)).filterNot(_ == t).map(termTree(_, exploreCompanion)).filterNot(x => supportedBaseTypes.contains(x.`type`)),
             companion = None // if(t.companion == NoType) None else Some(termTree(t.companion))
@@ -329,7 +335,7 @@ object Typebus extends ResourceDb{
           symbol = Typebus.Symbol.CaseClass,
           `type` = "io.surfkit.TypeWrapper",
           members = Map(
-            "wrap" -> Property(x, false)
+            "wrap" -> Property(x, 0, false)
           ),
           baseClasses = Seq.empty,
           companion = None
@@ -445,8 +451,8 @@ object Typebus extends ResourceDb{
   def merge(r: Node, l: Node): Node = {
     val mergeMap: Map[String, (Option[Property], Option[Property])] = (l.members.keys ++ r.members.keys).map( k => (k -> (l.members.get(k), r.members.get(k)) ) ).toMap
     val mergedMembers = mergeMap.map{
-      case (k, (Some(Property(ln:Node, lHasDefault, lDefaultVal)), Some(Property(rn:Node, rHasDefault, _)))) =>
-        k -> Property(merge(ln, rn), lHasDefault && rHasDefault, lDefaultVal)
+      case (k, (Some(Property(ln:Node, lpos, lHasDefault, lDefaultVal)), Some(Property(rn:Node, rpos, rHasDefault, _)))) =>
+        k -> Property(merge(ln, rn), lpos, lHasDefault && rHasDefault, lDefaultVal)
       case (k, (Some(x), Some(y))) => k -> x
       case (k, (None, Some(y))) => k -> y
       case (k, (Some(x), None)) => k -> x

@@ -34,10 +34,14 @@ object ServiceMethod extends ResourceDb{
           val argTpe = c.typecheck(q"(??? : $argChild)").tpe
           //println(s"retTpe:${retTpe}  ${retTpe.typeSymbol.fullName}")
           //println(s"argTpe:${argTpe}  ${argTpe.typeSymbol.fullName}")
-
-          methods += ServiceMethod(argTpe.typeSymbol.fullName, retTpe.typeSymbol.fullName)
-          val servicePath = databaseTablePath(databaseTableName)
-          Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)))
+          // FIXME: packaging a jar will fail when trying to access the resource files.  For now we can skip this.
+          try {
+            methods += ServiceMethod(argTpe.typeSymbol.fullName, retTpe.typeSymbol.fullName)
+            val servicePath = databaseTablePath(databaseTableName)
+            Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)))
+          }catch{
+            case _: Throwable =>
+          }
           q"""$mods def $methodName[..$tpes]($arg, meta: EventMeta): Future[$returnType] = { ..$body }"""
 
         case _ => c.abort(c.enclosingPosition, s"Annotation @ServiceMethod can be used only with methods of the form (T, EventMeta) => Future[U] instead of: ${annottees.map(_.tree).toList}")

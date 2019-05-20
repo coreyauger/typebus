@@ -51,6 +51,7 @@ class TypebusKafkaProducer(serviceId: ServiceIdentifier, system: ActorSystem, ka
 
   def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
+      system.log.info(s"publish event[${event.meta.eventType}]")
       // If an RPC call was made and this is not the service that called it.. we want to respond via the service channel.  This is why we do the compare to get the topic service name .. or simply use the fqn
       def handleRpcCallback = event.meta.directReply.map(_.service.name).filter(_ != serviceId.name)
       event.meta.key match{

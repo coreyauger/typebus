@@ -346,83 +346,99 @@ object Typebus extends ResourceDb{
 
     //println(s"members: ${tpe.members}")
     val rootScope = scoped(rootNode, "")
-    val typeTable = databaseTablePath(symbol.fullName)
-    if(Files.notExists(typeTable)){
-      Files.write(typeTable, serialise(rootNode))
-    }
+    // FIXME: packaging a jar will fail when trying to access the resource files.  For now we can skip this.
+    try{
+      val typeTable = databaseTablePath(symbol.fullName)
+      if(Files.notExists(typeTable)){
+        Files.write(typeTable, serialise(rootNode))
+      }
 
-    // compare the database type with the "rootNode" type.
-    val dbNode = deSerialise(Files.readAllBytes(typeTable))
-    val dbScoped = scoped(dbNode, "")
+      // compare the database type with the "rootNode" type.
+      val dbNode = deSerialise(Files.readAllBytes(typeTable))
+      val dbScoped = scoped(dbNode, "")
 
-    val adds = rootScope.toSet diff dbScoped.toSet  //; println(s"\n\nadds: ${adds}\n")
+      val adds = rootScope.toSet diff dbScoped.toSet  //; println(s"\n\nadds: ${adds}\n")
 
-    val subs = dbScoped.toSet diff rootScope.toSet  //; println(s"\n\nsubs: ${subs}\n")
+      val subs = dbScoped.toSet diff rootScope.toSet  //; println(s"\n\nsubs: ${subs}\n")
 
-    // A schema is invalid under the following conditions:
-    // * adding a new field without a default value
-    // * removing a field that does not contain a default value
-    // * changing the type of a field
+      // A schema is invalid under the following conditions:
+      // * adding a new field without a default value
+      // * removing a field that does not contain a default value
+      // * changing the type of a field
 
-    val checkAdditions = collapseTree(adds.toList) //; println(s"\n\nadds: ${collapseTree(adds.toList) }\n")
-    val checkSubtractions = collapseTree(subs.toList) //; println(s"\n\nsubs: ${collapseTree(subs.toList) }\n")
+      val checkAdditions = collapseTree(adds.toList) //; println(s"\n\nadds: ${collapseTree(adds.toList) }\n")
+      val checkSubtractions = collapseTree(subs.toList) //; println(s"\n\nsubs: ${collapseTree(subs.toList) }\n")
 
-    // get a map of "field path" to type
-    val addsTypeMap = checkAdditions.flatMap{ s => s.path.split(":").toList match{
-      case f :: t :: Nil => Some(f -> t)
-      case _ => None
-    }}.toMap
-    val subsTypeMap = checkSubtractions.flatMap{ s => s.path.split(":").toList match{
-      case f :: t :: Nil => Some(f -> t)
-      case _ => None
-    }}.toMap
+      // get a map of "field path" to type
+      val addsTypeMap = checkAdditions.flatMap{ s => s.path.split(":").toList match{
+        case f :: t :: Nil => Some(f -> t)
+        case _ => None
+      }}.toMap
+      val subsTypeMap = checkSubtractions.flatMap{ s => s.path.split(":").toList match{
+        case f :: t :: Nil => Some(f -> t)
+        case _ => None
+      }}.toMap
 
-    val typeCheck = subsTypeMap.keys.flatMap{ k => addsTypeMap.get(k).map{ t => k -> (subsTypeMap(k),t) } }
+      val typeCheck = subsTypeMap.keys.flatMap{ k => addsTypeMap.get(k).map{ t => k -> (subsTypeMap(k),t) } }
 
-    if(! typeCheck.isEmpty && !typeCheck.forall{ case (k, (t1, t2)) => t1 == t2 } ){ // changing the type of a field
-      c.abort(c.enclosingPosition,
-        s"""
-           |Schema evolution Failed !!
-           |You changed the type of one of you member fields
-           |Type failed:
-           |${typeCheck}
-           |
-        """.stripMargin)
-    }else if(!checkAdditions.isEmpty && checkAdditions.exists(!_.hasDefault) ){ // adding a new field without a default value ?
-      c.abort(c.enclosingPosition,
-        s"""
-           |Schema evolution Failed !!
-           |You have added a new field to a typebus type that does not have a default value.
-           |Type failed:
-           |${checkAdditions.find(! _.hasDefault).get}
-           |
-        """.stripMargin)
-    }else if(!checkSubtractions.isEmpty && checkSubtractions.exists(!_.hasDefault) ){ // removing a field that does not contain a default value ?
-      c.abort(c.enclosingPosition,
-        s"""
-           |Schema evolution Failed !!
-           |You have removed a field from your schema that did not contain a default value
-           |Type failed:
-           |${checkSubtractions.find(! _.hasDefault).get}
-           |
-        """.stripMargin)
-    }else{
-      // only get here if the checks pass...
-      val updatedSchema = merge(rootNode, dbNode) // ;println(s"\n\nmerged:\n ${updatedSchema}\n\n")
-      Files.write(typeTable, serialise(updatedSchema))
-      // create a new class
-      //https://stackoverflow.com/questions/29352611/instantiate-class-symbol-using-macro?rq=1
-      val Wtpe = weakTypeOf[W]
-      val Rtpe = weakTypeOf[R]
-      val fqn = symbol.fullName
-      //println(s"\nzert: ${Wtpe}\nio.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)")
-      val code =
-        q"""
+      if(! typeCheck.isEmpty && !typeCheck.forall{ case (k, (t1, t2)) => t1 == t2 } ){ // changing the type of a field
+        c.abort(c.enclosingPosition,
+          s"""
+             |Schema evolution Failed !!
+             |You changed the type of one of you member fields
+             |Type failed:
+             |${typeCheck}
+             |
+          """.stripMargin)
+      }else if(!checkAdditions.isEmpty && checkAdditions.exists(!_.hasDefault) ){ // adding a new field without a default value ?
+        c.abort(c.enclosingPosition,
+          s"""
+             |Schema evolution Failed !!
+             |You have added a new field to a typebus type that does not have a default value.
+             |Type failed:
+             |${checkAdditions.find(! _.hasDefault).get}
+             |
+          """.stripMargin)
+      }else if(!checkSubtractions.isEmpty && checkSubtractions.exists(!_.hasDefault) ){ // removing a field that does not contain a default value ?
+        c.abort(c.enclosingPosition,
+          s"""
+             |Schema evolution Failed !!
+             |You have removed a field from your schema that did not contain a default value
+             |Type failed:
+             |${checkSubtractions.find(! _.hasDefault).get}
+             |
+          """.stripMargin)
+      }else{
+        // only get here if the checks pass...
+        val updatedSchema = merge(rootNode, dbNode) // ;println(s"\n\nmerged:\n ${updatedSchema}\n\n")
+        Files.write(typeTable, serialise(updatedSchema))
+        // create a new class
+        //https://stackoverflow.com/questions/29352611/instantiate-class-symbol-using-macro?rq=1
+        val Wtpe = weakTypeOf[W]
+        val Rtpe = weakTypeOf[R]
+        val fqn = symbol.fullName
+        //println(s"\nzert: ${Wtpe}\nio.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)")
+        val code =
+          q"""
+              io.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)
+              new ByteStreamReaderWriter(new $Rtpe, new $Wtpe)
+           """
+        //println(showCode(code))
+        c.Expr[ByteStreamReaderWriter[Z]](code)
+      }
+    }catch{
+      case _: Throwable =>
+        val Wtpe = weakTypeOf[W]
+        val Rtpe = weakTypeOf[R]
+        val fqn = symbol.fullName
+        //println(s"\nzert: ${Wtpe}\nio.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)")
+        val code =
+          q"""
             io.surfkit.typebus.module.Service.registerServiceType[${tpe}](new $Rtpe, $fqn)
             new ByteStreamReaderWriter(new $Rtpe, new $Wtpe)
          """
-      //println(showCode(code))
-      c.Expr[ByteStreamReaderWriter[Z]](code)
+        //println(showCode(code))
+        c.Expr[ByteStreamReaderWriter[Z]](code)
     }
   }
 

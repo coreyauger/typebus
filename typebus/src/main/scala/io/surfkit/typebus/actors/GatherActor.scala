@@ -61,7 +61,7 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
         correlationId = Some(correlationId)
       )
       try {
-        log.debug(s"[GatherActor] publish ${msg.data}")
+        log.info(s"[GatherActor] publish ${msg.data}")
         val outEvent = PublishedEvent(
           meta = meta,
           payload = writer.write(msg.data)
@@ -76,8 +76,9 @@ class GatherActor[T : ClassTag, U : ClassTag](serviceIdentifier: ServiceIdentifi
       }
 
     case x:PublishedEvent =>
-      log.debug(s"GatherActor posting a reply.... ${x.payload.getClass.getSimpleName}")
+      log.info(s"GatherActor got reply.... ${x.meta.eventType}")
       try{
+        log.info(s"GatherActor try to deserialize reader: ${reader} for type: ${x.meta.eventType}")
         val responsePayload = Try(reader.read(x.payload)).toOption.getOrElse( ServiceExceptionReader.read(x.payload) )
         replyTo ! responsePayload
         producer.traceEvent(InEventTrace(producer.serviceIdentifier, x), x.meta)

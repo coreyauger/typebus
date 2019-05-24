@@ -77,7 +77,8 @@ package object bus {
             eventId = UUID.randomUUID().toString,
             eventType =  EventType.parse(event.getClass.getCanonicalName),
             trace = false,
-            occurredAt = Instant.now
+            occurredAt = Instant.now,
+            directReply = None
           ),
           payload = event match{
             case x: OutEventTrace => OutEventTraceWriter.write(x)
@@ -132,7 +133,7 @@ package object bus {
 
     def consume(publish: PublishedEvent)(implicit system: ActorSystem) = {
       system.log.info(s"typebus - consume event: ${publish.meta.eventType}")
-      if(publish.meta.directReply.map(_.service.name == service.serviceIdentifier.name).getOrElse[Boolean](false))    // handel rpc first since we won't have a key in "listOfServiceImplicitsReaders"
+      if(publish.meta.responseTo.isDefined && publish.meta.directReply.map(_.service.name == service.serviceIdentifier.name).getOrElse[Boolean](false))    // handel rpc first since we won't have a key in "listOfServiceImplicitsReaders"
         service.handleRpcReply(publish)
       else {
         val reader = service.listOfServiceImplicitsReaders.get(publish.meta.eventType).getOrElse(service.listOfImplicitsReaders(publish.meta.eventType))

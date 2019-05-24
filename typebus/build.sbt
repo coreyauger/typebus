@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
 
 val paradiseVersion = "2.1.1"
 
-resolvers += Resolver.sonatypeRepo("releases")
+//resolvers += Resolver.sonatypeRepo("releases")
 
 addCompilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
 

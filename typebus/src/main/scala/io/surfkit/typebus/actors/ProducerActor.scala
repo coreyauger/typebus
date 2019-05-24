@@ -22,9 +22,8 @@ class ProducerActor(producer: Publisher) extends Actor with ActorLogging with Av
           log.error(t, "Error trying to publish event.")
       }
 
-    case _ =>
-      log.warning(s"ProducerActor ${self.path.toStringWithoutAddress} ...WTF WTF WTF !!!!!!!!")
-      context.stop(self)
+    case x =>
+      log.warning(s"ProducerActor does not know how to handle type[${x.getClass.getSimpleName}] containing: ${x} ...WTF WTF WTF !!!!!!!!")
   }
 
   override def postStop() {

@@ -51,18 +51,20 @@ class TypebusKafkaProducer(serviceId: ServiceIdentifier, system: ActorSystem, ka
 
   def publish(event: PublishedEvent)(implicit system: ActorSystem): Unit = {
     try {
-      system.log.info(s"publish event[${event.meta.eventType}]")
+      system.log.info(s"publish event[${event.meta.eventType}]  directReply: ${event.meta.directReply}")
       // If an RPC call was made and this is not the service that called it.. we want to respond via the service channel.  This is why we do the compare to get the topic service name .. or simply use the fqn
-      def handleRpcCallback = event.meta.directReply.map(_.service.name).filter(_ != serviceId.name)
+      def handleRpcCallback = List(event.meta).find(_.responseTo.isDefined).flatMap(_.directReply.map(_.service.name))
       event.meta.key match{
         case Some(partitionKey) =>
           producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, partitionKey.map(_.toByte).toArray, publishedEventWriter.write(event)))
           handleRpcCallback.foreach{ serviceName =>
+            system.log.info(s"publish[${event.meta.eventType}] to rpc channel:${serviceName}")
             producer.send(new ProducerRecord[Array[Byte], Array[Byte]](serviceName, partitionKey.map(_.toByte).toArray, publishedEventWriter.write(event)))
           }
         case _ =>
           producer.send(new ProducerRecord[Array[Byte], Array[Byte]](event.meta.eventType.fqn, publishedEventWriter.write(event)))
           handleRpcCallback.foreach{ serviceName =>
+            system.log.info(s"publish[${event.meta.eventType}] to rpc channel:${serviceName}")
             producer.send(new ProducerRecord[Array[Byte], Array[Byte]](serviceName, publishedEventWriter.write(event)))
           }
       }
@@ -89,7 +91,6 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
        |********************************************************************************************************
        | << typebus Configuration <<<<<<<<<<<<<<<<<<<<<<<|>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
        |
-       | akka.cluster.seed.zookeeper.url                  ${kafkaConfig.cfg.getString("akka.cluster.seed.zookeeper.url")}
        | kka.remote.netty.tcp.hostname                    ${kafkaConfig.cfg.getString("akka.remote.netty.tcp.hostname")}
        | akka.remote.netty.tcp.port                       ${kafkaConfig.cfg.getString("akka.remote.netty.tcp.port")}
        | akka.cluster.roles                               ${kafkaConfig.cfg.getStringList("akka.cluster.roles")}
@@ -144,10 +145,9 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
             et
           else  // otherwise we got type erasured.  These are types we can not deduce such as Either[A,B].  So we must rely on the function mapping that we stored.
             service.listOfFunctions.get(inType).getOrElse(EventType.unit)
-        system.log.info(s"replyAndCommit for type: ${retType}")
-        system.log.info(s"in  type: ${retType}")
         val eventId = UUID.randomUUID.toString
         if (retType != EventType.unit) {
+          system.log.info(s"replyAndCommit for type: ${retType}")
           implicit val timeout = Timeout(4 seconds)
           val sb = service.streamBuilderMap(retType)
           val partitionKey = sb.partitionKey.flatMap(_ => sb.untyped(x._3)) // FIXME: this untyped bit sux

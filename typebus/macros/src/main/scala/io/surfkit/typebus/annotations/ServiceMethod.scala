@@ -1,8 +1,10 @@
 package io.surfkit.typebus.annotations
 
 import java.nio.file.Files
+
 import io.surfkit.typebus.ResourceDb
-import boopickle.Default._
+import play.api.libs.json.{Json, OFormat, Format}
+
 import scala.annotation.{StaticAnnotation, compileTimeOnly}
 import scala.language.experimental.macros
 import scala.reflect.macros.blackbox.Context
@@ -17,8 +19,17 @@ object ServiceMethod extends ResourceDb{
   val databaseTableName = "_Service"
 
   sealed trait Store
+  object Store{
+    implicit val format: OFormat[Store] = Json.format[Store]
+  }
   final case class ServiceMethod(in: String, out: String) extends Store
+  object ServiceMethod{
+    implicit val format: Format[ServiceMethod] = Json.format[ServiceMethod]
+  }
   final case class ServiceStore(methods: Set[ServiceMethod]) extends Store
+  object ServiceStore{
+    implicit val format: Format[ServiceStore] = Json.format[ServiceStore]
+  }
 
   var methods = Set.empty[ServiceMethod]
 
@@ -38,7 +49,7 @@ object ServiceMethod extends ResourceDb{
           try {
             methods += ServiceMethod(argTpe.typeSymbol.fullName, retTpe.typeSymbol.fullName)
             val servicePath = databaseTablePath(databaseTableName)
-            Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)))
+            Files.write(servicePath, serialiseServiceStore(ServiceStore(methods)).getBytes)
           }catch{
             case _: Throwable =>
           }
@@ -49,9 +60,9 @@ object ServiceMethod extends ResourceDb{
     c.Expr[Any](result)
   }
 
-  def serialiseServiceStore(value: ServiceStore): Array[Byte] =
-    Pickle.intoBytes(value).array
+  def serialiseServiceStore(value: ServiceStore): String = Json.toJson(value).toString()
+    //Pickle.intoBytes(value).array
 
-  def deSerialiseServiceStore(bytes: Array[Byte]): ServiceStore =
-    Unpickle[ServiceStore].fromBytes(java.nio.ByteBuffer.wrap(bytes))
+  def deSerialiseServiceStore(json: String): ServiceStore = Json.parse(json).as[ServiceStore]
+    //Unpickle[ServiceStore].fromBytes(java.nio.ByteBuffer.wrap(bytes))
 }

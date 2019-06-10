@@ -5,12 +5,11 @@ import java.io._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.stream.Collectors
 
-import boopickle.Default._
-
 import scala.collection.mutable
 import scala.concurrent.Future
 import io.surfkit.typebus.event.EventMeta
 import com.typesafe.config.ConfigFactory
+import play.api.libs.json._
 
 import scala.collection.JavaConversions._
 import scala.util.Try
@@ -77,6 +76,9 @@ object Typebus extends ResourceDb{
   sealed trait Term{
     def `type`: String
   }
+  object Term{
+    implicit val format: OFormat[Term] = Json.format[Term]
+  }
 
   /***
     * This type represents the AST type for a case class property
@@ -85,12 +87,18 @@ object Typebus extends ResourceDb{
     * @param hasDefault - if there as a default value provided or not.
     */
   case class Property(term: Term, pos: Int, hasDefault: Boolean, defaultValue: Option[String] = None)
+  object Property{
+    implicit val format: Format[Property] = Json.format[Property]
+  }
 
   /***
     * Terminator Node that contains a Type
     * @param `type` - the type for this terminator
     */
   case class Leaf(`type`: String) extends Term
+  object Leaf{
+    implicit val format: Format[Leaf] = Json.format[Leaf]
+  }
 
   sealed trait Symbol
   object Symbol{
@@ -98,6 +106,25 @@ object Typebus extends ResourceDb{
     case object Trait extends Symbol
     case object Companion extends Symbol
     case object CompanionCaseClass extends Symbol
+
+    // create the formats and provide them implicitly
+    implicit object format extends Format[Symbol] {
+      def reads(json: JsValue): JsResult[Symbol] = (json \ "Symbol").validate[String].map(_ match{
+        case "CaseClass" => CaseClass
+        case "Trait" => Trait
+        case "Companion" => Companion
+        case "CompanionCaseClass" => CompanionCaseClass
+      })
+
+      def writes(x: Symbol): JsValue = Json.obj(
+        "Symbol" -> (x match{
+          case CaseClass => "CaseClass"
+          case Trait => "Trait"
+          case Companion => "Companion"
+          case CompanionCaseClass => "CompanionCaseClass"
+        })
+      )
+    }
   }
 
   /***
@@ -106,6 +133,9 @@ object Typebus extends ResourceDb{
     * @param members - all the members declared in the case class (mapping of "name" -> Property)
     */
   case class Node(symbol: Symbol, `type`: String, members: Map[String, Property], baseClasses: Seq[Term], companion: Option[Node]) extends Term
+  object Node{
+    implicit val format: Format[Node] = Json.format[Node]
+  }
 
 
   /***
@@ -114,6 +144,9 @@ object Typebus extends ResourceDb{
     * @param contains - The type "inside" the container.
     */
   case class MonoContainer(`type`: String, contains: Term) extends Term
+  object MonoContainer{
+    implicit val format: Format[MonoContainer] = Json.format[MonoContainer]
+  }
 
   /***
     * Type container with 2 Type parameters, eg: Either, Map
@@ -122,6 +155,9 @@ object Typebus extends ResourceDb{
     * @param right - right "contained" type
     */
   case class BiContainer(`type`: String, left: Term, right: Term) extends Term
+  object BiContainer{
+    implicit val format: Format[BiContainer] = Json.format[BiContainer]
+  }
 
   /*****************************************************************************************************************/
 
@@ -131,6 +167,9 @@ object Typebus extends ResourceDb{
     * @param hasDefault - if this contains a default value
     */
   case class PropScope(path: String, hasDefault: Boolean)
+  object PropScope{
+    implicit val format: Format[PropScope] = Json.format[PropScope]
+  }
 
   val supportedBaseTypes = Set(
     "scala.String",
@@ -350,11 +389,11 @@ object Typebus extends ResourceDb{
     try{
       val typeTable = databaseTablePath(symbol.fullName)
       if(Files.notExists(typeTable)){
-        Files.write(typeTable, serialise(rootNode))
+        Files.write(typeTable, serialise(rootNode).getBytes)
       }
 
       // compare the database type with the "rootNode" type.
-      val dbNode = deSerialise(Files.readAllBytes(typeTable))
+      val dbNode = deSerialise(Files.readAllLines(typeTable).mkString("\n"))
       val dbScoped = scoped(dbNode, "")
 
       val adds = rootScope.toSet diff dbScoped.toSet  //; println(s"\n\nadds: ${adds}\n")
@@ -411,7 +450,7 @@ object Typebus extends ResourceDb{
       }else{
         // only get here if the checks pass...
         val updatedSchema = merge(rootNode, dbNode) // ;println(s"\n\nmerged:\n ${updatedSchema}\n\n")
-        Files.write(typeTable, serialise(updatedSchema))
+        Files.write(typeTable, serialise(updatedSchema).getBytes)
         // create a new class
         //https://stackoverflow.com/questions/29352611/instantiate-class-symbol-using-macro?rq=1
         val Wtpe = weakTypeOf[W]
@@ -447,16 +486,16 @@ object Typebus extends ResourceDb{
     * @param value Node that we want to write
     * @return - bytes
     */
-  def serialise(value: Node): Array[Byte] =
-    Pickle.intoBytes(value).array
+  def serialise(value: Node): String = Json.toJson(value).toString()
+    //Pickle.intoBytes(value).array
 
   /***
     * Read an AST Node type from an array of bytes.  Used fore reading from our DB
     * @param bytes
     * @return
     */
-  def deSerialise(bytes: Array[Byte]): Node =
-    Unpickle[Node].fromBytes(java.nio.ByteBuffer.wrap(bytes))
+  def deSerialise(json: String): Node = Json.parse(json).as[Node]
+    //Unpickle[Node].fromBytes(java.nio.ByteBuffer.wrap(bytes))
 
   /***
     * Given 2 Nodes we want to merge them into a final single Node

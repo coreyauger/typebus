@@ -9,9 +9,11 @@ version in ThisBuild := "0.0.6-SNAPSHOT"
 libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % "2.12.5",
   "org.scala-lang" % "scala-compiler" % "2.12.5",
+  "com.typesafe.play" %% "play-json" % "2.7.1",
   "com.github.scopt" %% "scopt" % "3.7.0",
-  "com.typesafe" % "config" % "1.2.1",
-  "io.suzaku" %% "boopickle" % "1.3.0"
+  "com.typesafe" % "config" % "1.2.1"
+  //,
+  //"io.suzaku" %% "boopickle" % "1.3.0"
 )
 
 val paradiseVersion = "2.1.1"

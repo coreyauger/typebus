@@ -108,6 +108,8 @@ package object bus {
           )
         )
       }
+      system.log.error(msg,t)
+      println(msg + s"\n${t.getMessage}"+"\n"+sw.toString)
       traceEvent(
         ExceptionTrace(serviceIdentifier, PublishedEvent(
           meta = EventMeta(
@@ -118,7 +120,7 @@ package object bus {
           ),
           payload = ServiceExceptionWriter.write(ex)
         )), meta)
-      system.log.error(msg,t)
+
       ex
     }
   }

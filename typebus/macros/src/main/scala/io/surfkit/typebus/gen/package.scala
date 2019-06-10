@@ -270,6 +270,7 @@ package object gen {
   }
 
   def codeGen(database: Path) = {
+    import scala.collection.JavaConversions._
     //println(s"path: ${database}")
     if(Files.isDirectory(database)) {
       val typebusDb =
@@ -283,8 +284,8 @@ package object gen {
         val it=walk.iterator()
         it.next()  // ignore "/typebus" directory we only want the contents.
         it.forEachRemaining{ x =>
-          if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllBytes(x))
-          else astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+          if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllLines(x).mkString("\n"))
+          else astTree = deSerialise(Files.readAllLines(x).mkString("\n")) :: astTree
         }
         astNodeToServiceGenerator(astTree, serviceStore.methods)
       }else throw new FileNotFoundException(s"Not a typebus database location: ${database}")
@@ -293,6 +294,7 @@ package object gen {
   }
 
   def selfCodeGen = {
+    import scala.collection.JavaConversions._
     import scala.collection.JavaConverters._
     val uri = this.getClass.getResource("/typebus").toURI()
     val fileSystem = FileSystems.newFileSystem(uri, scala.collection.mutable.HashMap.empty[String, String].asJava)
@@ -303,8 +305,8 @@ package object gen {
     val it=walk.iterator()
     it.next()  // ignore "/typebus" directory we only want the contents.
     it.forEachRemaining{ x =>
-      if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllBytes(x))
-      else astTree = deSerialise(Files.readAllBytes(x)) :: astTree
+      if(x.endsWith("_Service"))serviceStore = deSerialiseServiceStore(Files.readAllLines(x).mkString("\n"))
+      else astTree = deSerialise(Files.readAllLines(x).mkString("\n")) :: astTree
     }
     fileSystem.close()
     astNodeToServiceGenerator(astTree, serviceStore.methods)

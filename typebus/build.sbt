@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-version in ThisBuild := "0.0.6-SNAPSHOT"
+version in ThisBuild := "0.0.7-SNAPSHOT"
 
 lazy val macros = project
 
@@ -20,7 +20,7 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka" %% "akka-cluster" % akkaV,
   "com.typesafe.akka" %% "akka-slf4j" % akkaV,
   "ch.qos.logback" % "logback-classic" % "1.2.3",
-  "com.sksamuel.avro4s" %% "avro4s-core" % "2.0.2"
+  "com.sksamuel.avro4s" %% "avro4s-core" % "3.0.0-RC3"
 )
 
 val paradiseVersion = "2.1.1"

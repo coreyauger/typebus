@@ -11,12 +11,12 @@ version in ThisBuild := ver
 lazy val `typebus-kafka` =
   (project in file("."))
 
-val akkaV = "2.5.13"
+val akkaV = "2.5.23"
 
 libraryDependencies ++= Seq(
   "io.surfkit"        %% "typebus" %  ver,
   "io.surfkit"        %% "macros" %  ver,
-  "com.typesafe.akka" %% "akka-stream-kafka" % "1.0-RC1"
+  "com.typesafe.akka" %% "akka-stream-kafka" % "1.0.4"
 )
 
 fork in ThisBuild := true

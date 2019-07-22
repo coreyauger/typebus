@@ -11,7 +11,7 @@ version in ThisBuild := ver
 lazy val `typebus-testkit` =
   (project in file("."))
 
-val akkaV = "2.5.13"
+val akkaV = "2.5.23"
 
 libraryDependencies ++= Seq(
   "io.surfkit"        %% "typebus" %  ver,

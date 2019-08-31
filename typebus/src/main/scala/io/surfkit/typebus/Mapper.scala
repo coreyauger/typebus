@@ -67,10 +67,6 @@ trait AvroByteStreams{
   }
 
 
-
-
-
-
   class RecursiveAvroByteStreamReader[T : Decoder : ClassTag](sf: SchemaFor[T]) extends ByteStreamReader[T]{
     implicit val schemaFor = sf
     val avroSchema = AvroSchema[T]
@@ -111,6 +107,8 @@ trait AvroByteStreams{
   implicit val serviceIdentifierReader = new AvroByteStreamReader[ServiceIdentifier]
   implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
+  implicit val entityCreatedReader = new AvroByteStreamReader[EntityCreated]
+  implicit val entityCreatedWriter = new AvroByteStreamWriter[EntityCreated]
   implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
   implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
   implicit val OutEventTraceReader = new AvroByteStreamReader[OutEventTrace]

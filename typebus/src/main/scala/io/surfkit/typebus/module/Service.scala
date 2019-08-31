@@ -6,22 +6,28 @@ import akka.actor.{ActorLogging, ActorSystem}
 import akka.util.Timeout
 import io.surfkit.typebus.event._
 import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
+import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import java.util.UUID
 
 import io.surfkit.typebus.bus.{Publisher, StreamBuilder}
+import io.surfkit.typebus.entity.EntityDb
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
 object Service{
-  val registry = scala.collection.mutable.HashMap.empty[ EventType, String]
+  val registry = scala.collection.mutable.HashMap.empty[EventType, String]
+  val entityRegistry = scala.collection.mutable.HashMap.empty[String, EntityDb[_]]
 
   def registerServiceType[T : ClassTag](serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
     println(s"\nruntimeClass: ${runtimeClass}")
-    // CA - pretty cheesy data store.
     registry += EventType.parse(fqn) -> serviceType.schema
+  }
+
+  def resisterEntity[C, S](db: EntityDb[S]) = {
+    entityRegistry += db.typeKey.name -> db
   }
 }
 

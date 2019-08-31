@@ -227,9 +227,9 @@ object Typebus extends ResourceDb{
     def extractDefaultParam(src: String, caseClass: String, symbol:  c.universe.Symbol): String = {
       val cc = caseClass.split('.').last
       val prop = symbol.fullName.split('.').last
-      val start= s"(?s)case\\s+class\\s+${cc}\\s*".r.findFirstMatchIn(src).map(_.start).get
+      val start= s"(?s)case\\s+class\\s+${cc}\\s*\\(".r.findFirstMatchIn(src).map(_.start).get
       //println(s"start: ${start}")
-      val strRest = src.substring(start)
+      val strRest = src.substring(start-1)
       val s = strRest.substring(strRest.indexOf('(')+1)
       //println(s"s: ${s.take(20)}")
       val parms = s.foldLeft( (0, List.empty[Char]) ){ case ((par, str), ch) =>
@@ -252,7 +252,7 @@ object Typebus extends ResourceDb{
       //println(s"prop: ${prop}")
       located.filter(_.trim.startsWith(prop)).headOption match{
         case Some(eq) if eq.contains('=') => eq.split('=').last.trim
-        case _ => c.abort(c.enclosingPosition, s"Could not parse default value for type: ${cc}.${prop}")
+        case _ => c.abort(c.enclosingPosition, s"Could not parse default value for type: ${cc}.${prop} failed to parse: ${located} from: ${caseClass}, sym: ${symbol}")
       }
     }
 
@@ -435,7 +435,7 @@ object Typebus extends ResourceDb{
              |Schema evolution Failed !!
              |You have added a new field to a typebus type that does not have a default value.
              |Type failed:
-             |${checkAdditions.find(! _.hasDefault).get}
+             |${Json.prettyPrint(Json.toJson(checkAdditions.find(! _.hasDefault).get))}
              |
           """.stripMargin)
       }else if(!checkSubtractions.isEmpty && checkSubtractions.exists(!_.hasDefault) ){ // removing a field that does not contain a default value ?
@@ -444,7 +444,7 @@ object Typebus extends ResourceDb{
              |Schema evolution Failed !!
              |You have removed a field from your schema that did not contain a default value
              |Type failed:
-             |${checkSubtractions.find(! _.hasDefault).get}
+             |${Json.prettyPrint(Json.toJson(checkSubtractions.find(! _.hasDefault).get))}
              |
           """.stripMargin)
       }else{
@@ -466,7 +466,8 @@ object Typebus extends ResourceDb{
         c.Expr[ByteStreamReaderWriter[Z]](code)
       }
     }catch{
-      case _: Throwable =>
+      case a: scala.reflect.macros.runtime.AbortMacroException => throw a // we want to fail on these :)
+      case t: Throwable =>
         val Wtpe = weakTypeOf[W]
         val Rtpe = weakTypeOf[R]
         val fqn = symbol.fullName
@@ -486,7 +487,7 @@ object Typebus extends ResourceDb{
     * @param value Node that we want to write
     * @return - bytes
     */
-  def serialise(value: Node): String = Json.toJson(value).toString()
+  def serialise(value: Node): String = Json.prettyPrint(Json.toJson(value))
     //Pickle.intoBytes(value).array
 
   /***

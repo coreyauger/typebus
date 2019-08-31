@@ -109,6 +109,9 @@ package object event {
     */
   case class RpcClient(path: String, service: ServiceIdentifier) extends TypeBus
 
+
+  case class EntityCreated(entityName: String, id: String) extends TypeBus
+
   /***
     * EventMeta - details and routing information for an Event
     * @param eventId - unique UUID of an event

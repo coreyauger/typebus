@@ -4,14 +4,14 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-val ver = "0.0.6-SNAPSHOT"
+val ver = "0.0.7-SNAPSHOT"
 
 version in ThisBuild := ver
 
 lazy val `typebus-testkit` =
   (project in file("."))
 
-val akkaV = "2.5.13"
+val akkaV = "2.5.23"
 
 libraryDependencies ++= Seq(
   "io.surfkit"        %% "typebus" %  ver,

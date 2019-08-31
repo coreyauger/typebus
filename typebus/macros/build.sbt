@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-version in ThisBuild := "0.0.6-SNAPSHOT"
+version in ThisBuild := "0.0.8-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % "2.12.5",
@@ -12,8 +12,6 @@ libraryDependencies ++= Seq(
   "com.typesafe.play" %% "play-json" % "2.7.1",
   "com.github.scopt" %% "scopt" % "3.7.0",
   "com.typesafe" % "config" % "1.2.1"
-  //,
-  //"io.suzaku" %% "boopickle" % "1.3.0"
 )
 
 val paradiseVersion = "2.1.1"

@@ -66,6 +66,35 @@ trait AvroByteStreams{
     override def schema: String = avroSchema.toString
   }
 
+
+  class RecursiveAvroByteStreamReader[T : Decoder : ClassTag](sf: SchemaFor[T]) extends ByteStreamReader[T]{
+    implicit val schemaFor = sf
+    val avroSchema = AvroSchema[T]
+
+    override def read(bytes: Array[Byte]): T = {
+      val input = AvroInputStream.binary[T].from(bytes).build(avroSchema)
+      val result = input.iterator.toSeq
+      result.head
+    }
+
+    override def schema: String = avroSchema.toString
+  }
+
+  class RecursiveAvroByteStreamWriter[T : Encoder : ClassTag](sf: SchemaFor[T]) extends ByteStreamWriter[T]{
+    implicit val schemaFor = sf
+    val avroSchema = AvroSchema[T]
+
+    override def write(obj: T): Array[Byte] = {
+      val baos = new ByteArrayOutputStream()
+      val output = AvroOutputStream.binary[T].to(baos).build(avroSchema)
+      output.write(obj)
+      output.close()
+      baos.toByteArray
+    }
+
+    override def schema: String = avroSchema.toString
+  }
+
   implicit val HbReader = new AvroByteStreamReader[Hb]
   implicit val HbWriter = new AvroByteStreamWriter[Hb]
   implicit val ServiceExceptionReader = new AvroByteStreamReader[ServiceException]
@@ -78,6 +107,8 @@ trait AvroByteStreams{
   implicit val serviceIdentifierReader = new AvroByteStreamReader[ServiceIdentifier]
   implicit val serviceDescriptorWriter = new AvroByteStreamWriter[ServiceDescriptor]
   implicit val serviceDescriptorReader = new AvroByteStreamReader[ServiceDescriptor]
+  implicit val entityCreatedReader = new AvroByteStreamReader[EntityCreated]
+  implicit val entityCreatedWriter = new AvroByteStreamWriter[EntityCreated]
   implicit val getServiceDescriptorReader = new AvroByteStreamReader[GetServiceDescriptor]
   implicit val getServiceDescriptorWriter = new AvroByteStreamWriter[GetServiceDescriptor]
   implicit val OutEventTraceReader = new AvroByteStreamReader[OutEventTrace]

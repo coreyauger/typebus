@@ -13,7 +13,7 @@ scalacOptions ++= Seq("-unchecked", "-deprecation", "-feature", "-encoding", "ut
 lazy val `telemetry` =
   (project in file("."))
 
-val akkaV = "2.5.13"
+val akkaV = "2.5.23"
 
 val squbsV = "0.11.0"
 

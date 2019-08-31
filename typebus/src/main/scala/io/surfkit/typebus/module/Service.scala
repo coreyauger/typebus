@@ -5,7 +5,7 @@ import java.time.Instant
 import akka.actor.{ActorLogging, ActorSystem}
 import akka.util.Timeout
 import io.surfkit.typebus.event._
-import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter}
+import io.surfkit.typebus.{AvroByteStreams, ByteStreamReader, ByteStreamWriter, JsonStreamWriter}
 import akka.cluster.sharding.typed.scaladsl.EntityTypeKey
 import java.util.UUID
 
@@ -18,7 +18,7 @@ import scala.reflect.ClassTag
 
 object Service{
   val registry = scala.collection.mutable.HashMap.empty[EventType, String]
-  val entityRegistry = scala.collection.mutable.HashMap.empty[String, EntityDb[_]]
+  val entityRegistry = scala.collection.mutable.HashMap.empty[String, (String, EntityDb[_])]
 
   def registerServiceType[T : ClassTag](serviceType: io.surfkit.typebus.Schemacha, fqn: String) = {
     val runtimeClass = scala.reflect.classTag[T].runtimeClass
@@ -26,8 +26,10 @@ object Service{
     registry += EventType.parse(fqn) -> serviceType.schema
   }
 
-  def resisterEntity[C, S](db: EntityDb[S]) = {
-    entityRegistry += db.typeKey.name -> db
+  def registerEntity[A : ClassTag, S](db: EntityDb[S]) = {
+    val runtimeClass = scala.reflect.classTag[A].runtimeClass
+    println(s"\ndb accessor type: ${runtimeClass}")
+    entityRegistry += db.typeKey.name -> (runtimeClass.getCanonicalName, db)
   }
 }
 
@@ -61,6 +63,13 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
   def registerStream[T <: Any : ClassTag: TypeTag](f:  (T, EventMeta) => Future[Unit]) (implicit reader: ByteStreamReader[T]): StreamBuilder[T, Unit] =
     op2Unit(funToPF2Unit(f))
 
+  def registerDataBaseStream[T <: DbAccessor : ClassTag : TypeTag, U <: Any : ClassTag : TypeTag](db: EntityDb[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] = {
+    Service.registerEntity[T, U](db)
+    def dbFun(a: T, meta: EventMeta): Future[U] =
+      db.getState(a.id)
+    op2(funToPF2(dbFun))
+  }
+
   /***
     * registerServiceStream - register a hidden typebus level service function
     * @param f - the function to register
@@ -72,7 +81,6 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
     */
   def registerServiceStream[T <: TypeBus : ClassTag : TypeTag, U <: TypeBus : ClassTag : TypeTag](f:  (T, EventMeta) => Future[U]) (implicit reader: ByteStreamReader[T], writer: ByteStreamWriter[U]): StreamBuilder[T, U] =
     op2Service(funToPF2(f))
-
 
   /***
     * Route a message to the proper RPC client to close the Future response.
@@ -97,7 +105,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
   def makeServiceDescriptor = ServiceDescriptor(
     service = serviceIdentifier,
     upTime = upTime,
-    entities = Service.entityRegistry.keySet.toSet,
+    entities = Service.entityRegistry.map(x => EntityAccessor(x._1, x._2._1)).toSet,
     serviceMethods = listOfFunctions.toList.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>
         val reader = listOfImplicitsReaders(in)

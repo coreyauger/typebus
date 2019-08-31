@@ -120,7 +120,6 @@ trait AvroByteStreams{
 
 }
 
-
 trait JsonStreamWriter[A] extends Schemacha{
   def write(value: A): String
 }

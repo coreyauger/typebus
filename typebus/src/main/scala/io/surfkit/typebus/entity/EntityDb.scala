@@ -14,15 +14,11 @@ trait EntityDb[S] extends AvroByteStreams{
   def producer: Publisher
   def typeKey: EntityTypeKey[_]
 
-  io.surfkit.typebus.module.Service.resisterEntity(this)
-
   def createEntity[M](behavior: String => Behavior[M])(implicit system: akka.actor.ActorSystem): EntityContext => Behavior[M] =
     { ctx: EntityContext =>
       producer.publish(EntityCreated(typeKey.name, ctx.entityId))
       behavior(ctx.entityId)
     }
-
-
 
   def getState(id: String): Future[S]
   def modifyState(id: String, state: S): Future[S]

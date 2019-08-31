@@ -133,15 +133,6 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
   }
   service.registerServiceStream(getServiceDescriptor _)
 
-  // registering an entity db will allow for it to be queried via the `GetEntityState`
-  def registerEntityDatabases[S : ClassTag : ByteStreamReader : ByteStreamWriter](dbs: EntityDb[S]*) = {
-    def getEntityState(x: GetEntityState, meta: EventMeta): Future[S] = {
-      throw new RuntimeException("test")
-      //io.surfkit.typebus.module.Service.
-    }
-  }
-
-
   val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any, EventType), Future[Done]]{
     def apply(x: (ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]], PublishedEvent, Any, EventType) ) = {
       try {

@@ -86,6 +86,8 @@ package object event {
   case class ServiceMethod(in: InType, out: OutType) extends TypeBus
 
 
+  case class EntityAccessor(entityName: String, accessor: String) extends TypeBus
+
   /***
     * ServiceDescriptor - fully describe a service
     * @param service - the name of the service
@@ -94,7 +96,7 @@ package object event {
   case class ServiceDescriptor(
                               service: ServiceIdentifier,
                               upTime: Instant,
-                              entities: Set[String],
+                              entities: Set[EntityAccessor],
                               serviceMethods: Seq[ServiceMethod],
                               types: Map[String, TypeSchema]
                               ) extends TypeBus
@@ -115,7 +117,7 @@ package object event {
 
   case class EntityCreated(entityName: String, id: String) extends TypeBus
 
-  case class GetEntityState(entity: String, id: String) extends TypeBus
+  trait DbAccessor{ def id: String }
 
   /***
     * EventMeta - details and routing information for an Event

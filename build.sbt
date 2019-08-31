@@ -11,7 +11,6 @@ lazy val root =
   .aggregate(`typebus`)
   .aggregate(`typebus-kafka`)
   .aggregate(`typebus-testkit`)
-  .aggregate(`telemetry`)
 
 
 val `typebus` = ProjectRef(file("typebus"), "typebus")
@@ -19,8 +18,6 @@ val `typebus` = ProjectRef(file("typebus"), "typebus")
 val `typebus-kafka` = ProjectRef(file("typebus-kafka"), "typebus-kafka")
 
 val `typebus-testkit` = ProjectRef(file("typebus-testkit"), "typebus-testkit")
-
-val `telemetry` = ProjectRef(file("telemetry/server"), "telemetry")
 
 fork in ThisBuild := true
 

@@ -3,6 +3,8 @@ package io.surfkit.typebus
 import java.time.Instant
 import java.util.UUID
 
+import scala.reflect.ClassTag
+
 package object event {
 
   /***
@@ -92,6 +94,7 @@ package object event {
   case class ServiceDescriptor(
                               service: ServiceIdentifier,
                               upTime: Instant,
+                              entities: Set[String],
                               serviceMethods: Seq[ServiceMethod],
                               types: Map[String, TypeSchema]
                               ) extends TypeBus
@@ -111,6 +114,8 @@ package object event {
 
 
   case class EntityCreated(entityName: String, id: String) extends TypeBus
+
+  case class GetEntityState(entity: String, id: String) extends TypeBus
 
   /***
     * EventMeta - details and routing information for an Event

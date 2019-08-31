@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-version in ThisBuild := "0.0.8-SNAPSHOT"
+version in ThisBuild := "0.0.9-SNAPSHOT"
 
 lazy val macros = project
 

@@ -15,13 +15,17 @@ import scala.concurrent.duration._
 import com.typesafe.config.ConfigFactory
 import io.surfkit.typebus.actors.ProducerActor
 import io.surfkit.typebus.bus._
+import io.surfkit.typebus._
 import io.surfkit.typebus.event._
+import io.surfkit.typebus.entity.EntityDb
 import io.surfkit.typebus.module.Service
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.{KafkaProducer, ProducerRecord}
 import org.apache.kafka.common.serialization.ByteArrayDeserializer
 import java.util.UUID
 import java.time.Instant
+
+import scala.reflect.ClassTag
 
 
 trait TypebusKafkaConfig{
@@ -118,7 +122,7 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
 
 
   /***
-    * getServiceDescriptor - default hander to broadcast ServiceDescriptions
+    * getServiceDescriptor - default handler to broadcast ServiceDescriptions
     * @param x - GetServiceDescriptor is another service requesting a ServiceDescriptions
     * @param meta - EventMeta routing info
     * @return - Future[ServiceDescriptor]
@@ -128,6 +132,14 @@ class TypebusKafkaConsumer(sercieApi: Service, publisher: Publisher, system: Act
     Future.successful(serviceDescription)
   }
   service.registerServiceStream(getServiceDescriptor _)
+
+  // registering an entity db will allow for it to be queried via the `GetEntityState`
+  def registerEntityDatabases[S : ClassTag : ByteStreamReader : ByteStreamWriter](dbs: EntityDb[S]*) = {
+    def getEntityState(x: GetEntityState, meta: EventMeta): Future[S] = {
+      throw new RuntimeException("test")
+      //io.surfkit.typebus.module.Service.
+    }
+  }
 
 
   val replyAndCommit = new PartialFunction[(ConsumerMessage.CommittableMessage[Array[Byte], Array[Byte]],PublishedEvent, Any, EventType), Future[Done]]{

@@ -97,6 +97,7 @@ abstract class Service(val serviceIdentifier: ServiceIdentifier, publisher: Publ
   def makeServiceDescriptor = ServiceDescriptor(
     service = serviceIdentifier,
     upTime = upTime,
+    entities = Service.entityRegistry.keySet.toSet,
     serviceMethods = listOfFunctions.toList.filterNot(_._2 == EventType.parse("scala.Unit")).map{
       case (in, out) =>
         val reader = listOfImplicitsReaders(in)

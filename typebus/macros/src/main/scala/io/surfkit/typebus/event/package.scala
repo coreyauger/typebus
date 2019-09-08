@@ -13,9 +13,16 @@ package object event {
   sealed trait TypeBus{}
 
   final case class ServiceIdentifier(name: String, id: UUID = UUID.randomUUID) extends TypeBus
+  // HACK: avro wil not let us reuse the above type in the "Trace" definitions
+  final case class ServiceIdentifier2(name: String, id: UUID = UUID.randomUUID) extends TypeBus
+  object ServiceIdentifier2{
+    implicit def toServiceIdentifier2(x: ServiceIdentifier): ServiceIdentifier2 =
+      ServiceIdentifier2(x.name, x.id)
+  }
 
+  // CAUTION: avro will not let us re-use "ServiceIdentifier" here.
   trait Trace extends TypeBus{
-    def service: ServiceIdentifier
+    def service: ServiceIdentifier2
     def event: PublishedEvent
   }
   case class ServiceException(
@@ -26,14 +33,14 @@ package object event {
   ) extends TypeBus
 
   case class InEventTrace(
-               service: ServiceIdentifier,
+               service: ServiceIdentifier2,
                event: PublishedEvent) extends Trace
 
   case class OutEventTrace(
-                 service: ServiceIdentifier,
+                 service: ServiceIdentifier2,
                  event: PublishedEvent) extends Trace
   case class ExceptionTrace(
-                 service: ServiceIdentifier,
+                 service: ServiceIdentifier2,
                  event: PublishedEvent
                ) extends Trace
 

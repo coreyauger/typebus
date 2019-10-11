@@ -2,7 +2,7 @@ name := "typebus-root"
 
 organization in ThisBuild := "io.surfkit"
 
-version in ThisBuild := "0.0.11-SNAPSHOT"
+version in ThisBuild := "0.0.13-SNAPSHOT"
 
 publishArtifact := false
 

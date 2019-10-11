@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-version in ThisBuild := "0.0.12-SNAPSHOT"
+version in ThisBuild := "0.0.13-SNAPSHOT"
 
 libraryDependencies ++= Seq(
   "org.scala-lang" % "scala-reflect" % "2.12.5",

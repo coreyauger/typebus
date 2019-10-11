@@ -7,11 +7,11 @@ object Actor {
     val numberOfShards = 50   // should be factor of 10 greater the num nodes.
 
     trait Command {
-      def uuid: UUID
+      def entityId: String
     }
 
-    final case class Get(uuid: UUID) extends  Command
-    final case class ShardMessage(uuid: UUID, payload: Any) extends Command
+    final case class Get(entityId: String) extends  Command
+    final case class ShardMessage(entityId: String, payload: Any) extends Command
   }
 
   // This provides the inverse of a compose.

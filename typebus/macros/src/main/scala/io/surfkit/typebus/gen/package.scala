@@ -80,8 +80,10 @@ package object gen {
     def writeService(generator: ServiceGenerator): List[(String, String)] = {
       val methodMap = generator.methods.map(x => x.in -> x.out).toMap
       val fqlToCaseClass = generator.classes.map(x => x.fqn -> x).toMap
+      println(s"classes to gen: ${generator.classes.size}")
       generator.classes.groupBy(_.packageName).map{
         case (packageName, classes) =>
+          println(s"gen: ${packageName}")
           val sb = new StringBuffer()
           sb.append("/** MACHINE-GENERATED FROM AVRO SCHEMA. DO NOT EDIT DIRECTLY */\n\n")
           sb.append(s"package ${packageName.split('.').reverse.drop(1).reverse.mkString(".")}\n\n")
@@ -96,6 +98,7 @@ package object gen {
           sb.append( classes.map(x => x.classRep).mkString("\n") )
           sb.append(s"\n\n   object Implicits extends AvroByteStreams{\n")
           sb.append( classes.map{ cc =>
+            println(s"Class: ${cc}")
             s"""
               |      implicit val ${cc.simpleName}Reader = new AvroByteStreamReader[${cc.simpleName}]
               |      implicit val ${cc.simpleName}Writer = new AvroByteStreamWriter[${cc.simpleName}]
@@ -144,6 +147,7 @@ package object gen {
             if (!Files.exists(modelPath))
               Files.createDirectories(modelPath)
             val filePath = Paths.get(path.mkString("/") + "/data.scala")
+            println(s"Writing file: ${filePath}")
             Files.write(filePath, sourceCode.getBytes)
         }
       }catch{

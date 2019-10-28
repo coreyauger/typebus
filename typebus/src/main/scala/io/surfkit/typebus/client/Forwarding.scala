@@ -10,14 +10,15 @@ import scala.reflect.ClassTag
 
 trait Forwarding {
 
-  def forward[T : ClassTag](publisher: Publisher, x: T, caller: RpcClient, correlationId: Option[String] = None)(implicit w:ByteStreamWriter[T], system: ActorSystem) : Unit= {
+  def forward[T : ClassTag](publisher: Publisher, x: T, caller: RpcClient, correlationId: Option[String] = None, settings: Map[String, String] = Map.empty)(implicit w:ByteStreamWriter[T], system: ActorSystem) : Unit= {
     val tType = scala.reflect.classTag[T].runtimeClass.getCanonicalName
     val meta =
       EventMeta(
         eventId = UUID.randomUUID().toString,
         eventType = EventType.parse(tType),
         directReply = Some(caller),
-        correlationId = correlationId
+        correlationId = correlationId,
+        extra = settings
       )
     publisher.publish(PublishedEvent(
       meta = meta,

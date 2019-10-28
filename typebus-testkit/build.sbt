@@ -4,7 +4,7 @@ organization in ThisBuild := "io.surfkit"
 
 scalaVersion in ThisBuild := "2.12.5"
 
-val ver = "0.0.14-SNAPSHOT"
+val ver = "0.0.15-SNAPSHOT"
 
 version in ThisBuild := ver
 

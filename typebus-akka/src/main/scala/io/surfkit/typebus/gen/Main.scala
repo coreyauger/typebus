@@ -1,36 +1,30 @@
 package io.surfkit.typebus.gen
 
-import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.cluster.seed.ZookeeperClusterSeed
-import io.surfkit.typebus.AvroByteStreams
-import io.surfkit.typebus.event._
+import akka.actor.ActorSystem
 import io.surfkit.typebus.module.Service
-import io.surfkit.typebus.bus.akka.AkkaBus
+import io.surfkit.typebus.event.ServiceIdentifier
+import io.surfkit.typebus.cli._
+import io.surfkit.typebus.bus.akka.{AkkaBusConsumer, AkkaBusProducer}
+
 import scala.concurrent.duration._
 
-
-
-class AkkaGenActor(args: Array[String]) extends Service[TypeBus]("code-gen") with AkkaBus[TypeBus] {
-  import context.dispatcher
-
-  registerStream(genScalaServiceDescription("akka", List("src", "main", "scala")) _)
-  startTypeBus
-
-  val getServiceDescriptor = GetServiceDescriptor("")
-
-  system.log.info("Waiting 7 sec to call getServiceDescriptor")
-  context.system.scheduler.scheduleOnce(7 seconds) {
-    publish(getServiceDescriptor)
-  }
-}
-
 /***
-  * App to generate source code for a service.
-  * This is just a Typebus Service[TypeBus]
+  * Cli
   */
-object Main extends App{
-  implicit val system = ActorSystem("squbs")  // TODO: get this from where? .. cfg?
+object Main extends App {
 
-  ZookeeperClusterSeed(system).join()
-  system.actorOf(Props(new AkkaGenActor(args)))
+  implicit val system = ActorSystem("codegen")
+  lazy val serviceIdentity = ServiceIdentifier("gen-code-service")
+
+  // only want to activate and join cluster in certain cases
+  //ZookeeperClusterSeed(system).join()
+  lazy val producer = new AkkaBusProducer(serviceIdentity, system)
+  lazy val service = new Service(serviceIdentity, producer){
+  }
+  lazy val consumer = new AkkaBusConsumer(service, producer, system)
+
+  println("\n\n***********\n\n")
+  CommandParser.runCli
+
+  Thread.currentThread().join()
 }

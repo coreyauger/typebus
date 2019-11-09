@@ -13,10 +13,10 @@ import com.typesafe.config.{ConfigException, ConfigFactory}
 import io.surfkit.typebus.{AvroByteStreams, event}
 import io.surfkit.typebus.actors.ProducerActor
 import io.surfkit.typebus.bus.{Consumer, Publisher}
-import io.surfkit.typebus.module.Service
+import io.surfkit.typebus.module.{Module, Service}
 import java.util.UUID
 
-import io.surfkit.typebus.event.{EventMeta, GetServiceDescriptor, InEventTrace, OutEventTrace, PublishedEvent, ServiceDescriptor, ServiceIdentifier}
+import io.surfkit.typebus.event.{EventMeta, EventType, GetServiceDescriptor, InEventTrace, OutEventTrace, PublishedEvent, Recoverable, ServiceDescriptor, ServiceIdentifier, TypeBus}
 import org.joda.time.DateTime
 
 import scala.util.Try
@@ -35,6 +35,7 @@ class AkkaBusProducer(serviceId: ServiceIdentifier, sys: ActorSystem) extends Pu
       import akka.cluster.pubsub.DistributedPubSubMediator.Publish
       def receive = {
         case event: PublishedEvent =>
+          system.log.info(s"AkkaBusProducer publish[${event.meta.eventType}] to mediator: ${mediator}")
           def handleRpcCallback = List(event.meta).find(_.responseTo.isDefined).flatMap(_.directReply.map(_.service.name))
           mediator ! Publish(event.meta.eventType.fqn, event, sendOneMessageToEachGroup=true )
           handleRpcCallback.foreach{ serviceName =>
@@ -53,18 +54,21 @@ class AkkaBusProducer(serviceId: ServiceIdentifier, sys: ActorSystem) extends Pu
     system.actorOf(Props(new ProducerActor(this)))
 }
 
-class AkkaBusConsumer(sercieApi: Service, publisher: Publisher, sys: ActorSystem) extends Actor with Consumer{
+class AkkaBusConsumer(sercieApi: Service, publisher: Publisher, sys: ActorSystem) extends Actor with Consumer
+{
   implicit val system = sys
+  import system.dispatcher
   val log = system.log
   val cfg = ConfigFactory.load
   val mediator = DistributedPubSub(system).mediator
+
+  override def service = sercieApi
 
   log.info(
     s"""
        |********************************************************************************************************
        | << typebus Configuration <<<<<<<<<<<<<<<<<<<<<<<|>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
        |
-       | akka.cluster.seed.zookeeper.url                  ${cfg.getString("akka.cluster.seed.zookeeper.url")}
        | kka.remote.netty.tcp.hostname                    ${cfg.getString("akka.remote.netty.tcp.hostname")}
        | akka.remote.netty.tcp.port                       ${cfg.getString("akka.remote.netty.tcp.port")}
        | akka.cluster.roles                               ${cfg.getStringList("akka.cluster.roles")}
@@ -79,43 +83,45 @@ class AkkaBusConsumer(sercieApi: Service, publisher: Publisher, sys: ActorSystem
     * @return - Future[ServiceDescriptor]
     */
   def getServiceDescriptor(x: GetServiceDescriptor, meta: EventMeta): Future[ServiceDescriptor] = {
-    system.log.debug(s"getServiceDescriptor: ${serviceDescription}")
-    Future.successful(serviceDescription)
+    system.log.debug(s"getServiceDescriptor: ${sercieApi.makeServiceDescriptor}")
+    Future.successful(sercieApi.makeServiceDescriptor)
   }
   service.registerServiceStream(getServiceDescriptor _)
   system.log.info(s"\n\nTYPEBUS AKKA STARTING TO LISTEN ON TOPICS: ${(service.serviceIdentifier.name :: (service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList)).mkString("\n")}")
 
   (service.serviceIdentifier.name :: (service.listOfFunctions.keys.map(_.fqn).toList ::: service.listOfServiceFunctions.keys.map(_.fqn).toList)).map { topic =>
     log.info(s"typebus akka bus subscribe to: ${topic}")
-    mediator ! Subscribe(topic.fqn, Some(service.serviceIdentifier.service), context.self)
+    mediator ! Subscribe(topic, Some(service.serviceIdentifier.name), context.self)
   }
 
   def receive: Receive = {
-    case event: PublishedEvent =>
-      context.system.log.info(s"TypeBus: got msg for topic: ${event.meta.eventType}")
+    case msg: PublishedEvent =>
+      system.log.info(s"AkkaBusConsumer got[${msg.meta.eventType}]")
+      context.system.log.info(s"TypeBus: got msg for topic: ${msg.meta.eventType}")
       try {
-        publisher.traceEvent(InEventTrace(service.serviceIdentifier, publish), publish.meta)
-        consume(event) map{ ret =>
-          implicit val timeout = Timeout(4 seconds)
+        publisher.traceEvent(InEventTrace(service.serviceIdentifier, msg), msg.meta)
+        consume(msg).map{ret =>
+          context.system.log.info(s"TypeBus: RET: ${EventType.parse(ret.getClass.getCanonicalName)}")
+          println(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
           val retType: EventType = EventType.parse(ret.getClass.getCanonicalName)
           val publishedEvent = PublishedEvent(
-            meta = event.meta.copy(
+            meta = msg.meta.copy(
               eventId = UUID.randomUUID.toString,
               eventType = retType,
-              responseTo = Some(event.meta.eventId),
               occurredAt = java.time.Instant.now
             ),
-            payload = listOfServiceImplicitsWriters.get(retType).map{ writer =>
+            payload = service.listOfServiceImplicitsWriters.get(retType).map{ writer =>
               writer.write(ret.asInstanceOf[TypeBus])
-            }.getOrElse(listOfImplicitsWriters(retType).write(ret.asInstanceOf[UserBaseType]))
+            }.getOrElse(service.listOfImplicitsWriters(retType).write(ret))
           )
-          event.meta.directReply.filterNot(_.service.service == serviceName).foreach( rpc => system.actorSelection(rpc.path).resolveOne().map( actor => actor ! publishedEvent ) )
-          publish(publishedEvent)
+          context.system.log.info(s"** TypeBus: RET PUBLISH: ${publishedEvent}")
+          publisher.publish(publishedEvent)
+          (msg, msg, ret, msg.meta.eventType)
         }
       }catch{
         case t:Throwable =>
-          val error = s"Error consuming event: ${event.meta.eventType}\n${t.getMessage}"
-          produceErrorReport(t, event.meta, error)
+          log.error(s"Error consuming event: ${msg.meta.eventType}", t)
+          publisher.produceErrorReport(t, msg.meta, s"Error consuming event: ${msg.meta.eventType}\n${t.getMessage}")
       }
   }
 

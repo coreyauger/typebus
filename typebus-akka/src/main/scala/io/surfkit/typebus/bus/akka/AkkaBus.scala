@@ -36,11 +36,18 @@ class AkkaBusProducer(serviceId: ServiceIdentifier, sys: ActorSystem) extends Pu
       def receive = {
         case event: PublishedEvent =>
           system.log.info(s"AkkaBusProducer publish[${event.meta.eventType}] to mediator: ${mediator}")
+          system.log.info(s"###### AkkaBusProducer handleRpcCallback[${event.meta.eventType}] ${event.meta.responseTo}")
           def handleRpcCallback = List(event.meta).find(_.responseTo.isDefined).flatMap(_.directReply.map(_.service.name))
           mediator ! Publish(event.meta.eventType.fqn, event, sendOneMessageToEachGroup=true )
-          handleRpcCallback.foreach{ serviceName =>
-            system.log.info(s"publish[${event.meta.eventType}] to rpc channel:${serviceName}")
-            mediator ! Publish(serviceName, event)
+          import system.dispatcher
+          handleRpcCallback.foreach{ _ =>
+            val rpc = event.meta.directReply.get
+            system.log.info(s"@@@@@@ handleRpcReply on service(${serviceIdentifier.name}) for type: ${event.meta.eventType}")
+              system.log.info(s"@@@@@@ handleRpcReply lookup actor: ${rpc.path}")
+              context.actorSelection(rpc.path).resolveOne(4 seconds).map{
+                system.log.info(s"handleRpcReply found actor. replying with type: ${event.meta.eventType}")
+                actor => actor ! event
+              }
           }
       }
     }))
@@ -101,14 +108,15 @@ class AkkaBusConsumer(sercieApi: Service, publisher: Publisher, sys: ActorSystem
       try {
         publisher.traceEvent(InEventTrace(service.serviceIdentifier, msg), msg.meta)
         consume(msg).map{ret =>
-          context.system.log.info(s"TypeBus: RET: ${EventType.parse(ret.getClass.getCanonicalName)}")
-          println(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
           val retType: EventType = EventType.parse(ret.getClass.getCanonicalName)
+          context.system.log.info(s"TypeBus: RET: ${retType}")
+          //println(s"listOfImplicitsWriters: ${service.listOfImplicitsWriters}")
           val publishedEvent = PublishedEvent(
             meta = msg.meta.copy(
               eventId = UUID.randomUUID.toString,
               eventType = retType,
-              occurredAt = java.time.Instant.now
+              occurredAt = java.time.Instant.now,
+              responseTo = Some(msg.meta.eventId)
             ),
             payload = service.listOfServiceImplicitsWriters.get(retType).map{ writer =>
               writer.write(ret.asInstanceOf[TypeBus])
